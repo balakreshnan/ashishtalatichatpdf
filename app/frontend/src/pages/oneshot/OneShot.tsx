@@ -26,8 +26,8 @@ const OneShot = () => {
     const [promptTemplatePrefix, setPromptTemplatePrefix] = useState<string>("");
     const [promptTemplateSuffix, setPromptTemplateSuffix] = useState<string>("");
     const [retrieveCount, setRetrieveCount] = useState<number>(3);
-    const [temperature, setTemperature] = useState<number>(0.3);
-    const [tokenLength, setTokenLength] = useState<number>(500);
+    const [temperature, setTemperature] = useState<number>(0);
+    const [tokenLength, setTokenLength] = useState<number>(1000);
     const [useSemanticRanker, setUseSemanticRanker] = useState<boolean>(true);
     const [useSemanticCaptions, setUseSemanticCaptions] = useState<boolean>(false);
     const [useSuggestFollowupQuestions, setUseSuggestFollowupQuestions] = useState<boolean>(true);
@@ -288,7 +288,7 @@ const OneShot = () => {
     };
 
     const onTokenLengthChange = (_ev?: React.SyntheticEvent<HTMLElement, Event>, newValue?: string) => {
-        setTokenLength(parseInt(newValue || "500"));
+        setTokenLength(parseInt(newValue || "1000"));
     };
 
     const onApproachChange = (_ev?: React.FormEvent<HTMLElement | HTMLInputElement>, option?: IChoiceGroupOption) => {
@@ -688,6 +688,7 @@ const OneShot = () => {
                                 <Stack enableScopedSelectors tokens={outerStackTokens}>
                                     <Stack enableScopedSelectors  tokens={innerStackTokens}>
                                         <Stack.Item grow styles={stackItemStyles}>
+                                        <DefaultButton onClick={refreshBlob}>Refresh Docs</DefaultButton>&nbsp;
                                         <Label>Index Type</Label>
                                         &nbsp;
                                         <Dropdown
@@ -784,7 +785,7 @@ const OneShot = () => {
                                 isFooterAtBottom={true}
                             >
                                 <br/>
-                                <div>
+                                {/* <div>
                                         <DefaultButton onClick={refreshBlob}>Refresh Docs</DefaultButton>
                                         <Dropdown
                                             selectedKey={selectedItem ? selectedItem.key : undefined}
@@ -796,7 +797,7 @@ const OneShot = () => {
                                         />
                                         &nbsp;
                                         <Label className={styles.commandsContainer}>Index Type : {selectedIndex}</Label>
-                                </div>
+                                </div> */}
                                  <SpinButton
                                     className={styles.oneshotSettingsSeparator}
                                     label="Set the Temperature:"

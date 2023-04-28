@@ -193,7 +193,7 @@ def refreshIndex():
                     "embedded": blob.metadata["embedded"],
                     "indexName": blob.metadata["indexName"],
                     "namespace":blob.metadata["namespace"],
-                    "qa":blob.metadata["qa"],
+                    "qa": blob.metadata["qa"],
                     "summary":blob.metadata["summary"],
                     "name":blob.name,
                     "indexType":blob.metadata["indexType"],
@@ -245,6 +245,13 @@ def uploadBinaryFile():
         blobClient = containerClient.get_blob_client(blobName)
         #blob_client.upload_blob(bytes_data,overwrite=True, content_settings=ContentSettings(content_type=content_type))
         blobClient.upload_blob(file.read(), overwrite=True)
+        blobClient.set_blob_metadata(metadata={"embedded": "false", 
+                                        "indexName": "", 
+                                        "namespace": "", 
+                                        "qa": "No Qa Generated",
+                                        "name":blobName,
+                                        "summary": "No Summary Created", 
+                                        "indexType": ""})
         #jsonDict = json.dumps(blobJson)
         return jsonify({'message': 'File uploaded successfully'}), 200
     except Exception as e:
@@ -259,6 +266,7 @@ def content_file(path):
     url = os.environ.get("BLOB_CONNECTION_STRING")
     containerName = os.environ.get("BLOB_CONTAINER_NAME")
     blobClient = BlobServiceClient.from_connection_string(url)
+    logging.info(f"Getting blob {path}")
     blobContainer = blobClient.get_container_client(container=containerName)
     blob = blobContainer.get_blob_client(path).download_blob()
     mime_type = blob.properties["content_settings"]["content_type"]
