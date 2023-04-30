@@ -2,8 +2,8 @@
     "IsEncrypted": false,
     "Values": {
       "FUNCTIONS_WORKER_RUNTIME": "python",
+      "DOCGENERATOR_URL": "http://localhost:7071/api/DocGenerator?code=",
       "AzureWebJobsStorage": "UseDevelopmentStorage=true",
-      "AzureWebJobs.HttpTrigger1.Disabled": "false",
       "OpenAiKey": "", // Open AI Key
       "OpenAiService": "", // Name of Open AI Service
       "OpenAiEndPoint": "", // FQDN of Open AI Service
@@ -21,6 +21,7 @@
       "RedisPort": "6379",
       "OpenAiDocStorName": "", // Storage name
       "OpenAiDocStorKey": "", // Storage doc
+      "OpenAiDocStorConnString": "", // Storage connection string
       "OpenAiDocContainer": "", // Storage Container
       "SearchService":"", // Search Service 
       "SearchKey":"", // Search Key
