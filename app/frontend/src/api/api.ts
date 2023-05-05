@@ -94,6 +94,50 @@ export async function askAgentApi(options: AskRequest): Promise<AskResponse> {
 
 }
 
+export async function askTaskAgentApi(options: AskRequest): Promise<AskResponse> {
+  const response = await fetch('/askTaskAgent', {
+      method: "POST",
+      headers: {
+          "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+          postBody: {
+            values: [
+              {
+                recordId: 0,
+                data: {
+                  text: '',
+                  question: options.question,
+                  approach: options.approach,
+                  overrides: {
+                      indexType: options.overrides?.indexType,
+                      indexes: options.overrides?.indexes,
+                      semantic_ranker: options.overrides?.semanticRanker,
+                      semantic_captions: options.overrides?.semanticCaptions,
+                      top: options.overrides?.top,
+                      temperature: options.overrides?.temperature,
+                      prompt_template: options.overrides?.promptTemplate,
+                      prompt_template_prefix: options.overrides?.promptTemplatePrefix,
+                      prompt_template_suffix: options.overrides?.promptTemplateSuffix,
+                      exclude_category: options.overrides?.excludeCategory,
+                      chainType: options.overrides?.chainType,
+                      tokenLength: options.overrides?.tokenLength,
+                  }
+                }
+              }
+            ]
+          }
+      })
+  });
+
+  const parsedResponse: ChatResponse = await response.json();
+  if (response.status > 299 || !response.ok) {
+      throw Error("Unknown error");
+  }
+  return parsedResponse.values[0].data
+
+}
+
 export async function chatGptApi(options: ChatRequest, indexNs: string, indexType:string): Promise<AskResponse> {
     const response = await fetch('/chat' , {
         method: "POST",
@@ -223,7 +267,7 @@ export async function uploadFile(fileName:string, fileContent:any, contentType:s
   return "Success";
 }
 
-export async function uploadBinaryFile(formData:any) : Promise<string> {
+export async function uploadBinaryFile(formData:any, indexName:string) : Promise<string> {
   const response = await fetch('/uploadBinaryFile', {
     method: "POST",
     body: formData
@@ -238,7 +282,8 @@ export async function uploadBinaryFile(formData:any) : Promise<string> {
 
 export async function processDoc(indexType: string, loadType : string, multiple: string, indexName : string, files: any,
   blobConnectionString : string, blobContainer : string, blobPrefix : string, blobName : string,
-  s3Bucket : string, s3Key : string, s3AccessKey : string, s3SecretKey : string, s3Prefix : string) : Promise<string> {
+  s3Bucket : string, s3Key : string, s3AccessKey : string, s3SecretKey : string, s3Prefix : string,
+  existingIndex : string, existingIndexNs: string) : Promise<string> {
   const response = await fetch('/processDoc', {
     method: "POST",
     headers: {
@@ -249,6 +294,8 @@ export async function processDoc(indexType: string, loadType : string, multiple:
       multiple: multiple,
       loadType:loadType,
       indexName:indexName,
+      existingIndex:existingIndex,
+      existingIndexNs:existingIndexNs,
       postBody: {
         values: [
           {
@@ -271,10 +318,62 @@ export async function processDoc(indexType: string, loadType : string, multiple:
     })
   });
 
+  const parsedResponse: ChatResponse = await response.json();
   if (response.status > 299 || !response.ok) {
-    return "Error";
+      return "Error";
+  } else {
+    if (parsedResponse.values[0].data.error) {
+      return parsedResponse.values[0].data.error;
+    }
+    return 'Success';
   }
-  return "Success";
+  // if (response.status > 299 || !response.ok) {
+  //   return "Error";
+  // }
+  
+  // return "Success";
+}
+
+export async function indexManagement(indexType:string, indexName:string, blobName:string, indexNs:string,
+  operation:string) : Promise<string> {
+  const response = await fetch('/indexManagement', {
+    method: "POST",
+    headers: {
+        "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      indexType:indexType,
+      blobName:blobName,
+      indexNs:indexNs,
+      indexName:indexName,
+      operation:operation,
+      postBody: {
+        values: [
+          {
+            recordId: 0,
+            data: {
+              text: ''
+            }
+          }
+        ]
+      }
+    })
+  });
+
+  const parsedResponse: ChatResponse = await response.json();
+  if (response.status > 299 || !response.ok) {
+      return "Error";
+  } else {
+    if (parsedResponse.values[0].data.error) {
+      return parsedResponse.values[0].data.error;
+    }
+    return 'Success';
+  }
+  // if (response.status > 299 || !response.ok) {
+  //   return "Error";
+  // }
+  
+  // return "Success";
 }
 
 export async function chatJsApi(question: string, history: never[], indexNs: string, indexType:string): Promise<AskResponse> { 
@@ -402,6 +501,39 @@ export async function sqlChain(question:string, top: number): Promise<SqlRespons
   return parsedResponse.values[0].data
 }
 
+export async function verifyPassword(passType:string, password: string): Promise<string> {
+  const response = await fetch('/verifyPassword' , {
+      method: "POST",
+      headers: {
+          "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        passType:passType,
+        password:password,
+        postBody: {
+          values: [
+            {
+              recordId: 0,
+              data: {
+                text: ''
+              }
+            }
+          ]
+        }
+      })
+});
+
+const parsedResponse: ChatResponse = await response.json();
+  if (response.status > 299 || !response.ok) {
+      return "Error";
+  } else {
+    if (parsedResponse.values[0].data.error) {
+      return parsedResponse.values[0].data.error;
+    }
+    return 'Success';
+  }
+}
+
 export async function getSpeechToken(): Promise<SpeechTokenResponse> {
   const response = await fetch('/speechToken' , {
       method: "POST",
@@ -417,7 +549,7 @@ export async function getSpeechToken(): Promise<SpeechTokenResponse> {
   return parsedResponse
 }
 
-export async function summarizer(requestText: string, promptType:string, promptName: string, docType: string, chainType:string): Promise<string> {
+export async function summarizer(options: AskRequest, requestText: string, promptType:string, promptName: string, docType: string, chainType:string): Promise<string> {
   const response = await fetch('/summarizer' , {
       method: "POST",
       headers: {
@@ -433,7 +565,11 @@ export async function summarizer(requestText: string, promptType:string, promptN
             {
               recordId: 0,
               data: {
-                text: requestText
+                text: requestText,
+                overrides: {
+                  temperature: options.overrides?.temperature,
+                  tokenLength: options.overrides?.tokenLength
+                }
               }
             }
           ]
