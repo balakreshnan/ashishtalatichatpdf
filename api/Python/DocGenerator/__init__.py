@@ -100,10 +100,11 @@ def main(req: func.HttpRequest, context: func.Context) -> func.HttpResponse:
 
     if body:
         try:
-            pinecone.init(
-                api_key=PineconeKey,  # find at app.pinecone.io
-                environment=PineconeEnv  # next to api key in console
-            )
+            if len(PineconeKey) > 10 and len(PineconeEnv) > 10:
+                pinecone.init(
+                    api_key=PineconeKey,  # find at app.pinecone.io
+                    environment=PineconeEnv  # next to api key in console
+                )
         except:
             logging.info("Pinecone already initialized")
 
@@ -224,7 +225,7 @@ def storeIndex(indexType, docs, fileName, nameSpace, embeddingModelType):
         openai.api_key = OpenAiKey
         openai.api_version = OpenAiVersion
         openai.api_base = f"https://{OpenAiService}.openai.azure.com"
-        embeddings = OpenAIEmbeddings(model=OpenAiEmbedding,
+        embeddings = OpenAIEmbeddings(deployment=OpenAiEmbedding,
                 chunk_size=1,
                 openai_api_key=OpenAiKey)
     elif embeddingModelType == "openai":

@@ -1,9 +1,11 @@
-import { AskRequest, AskResponse, ChatRequest, ChatResponse, SpeechTokenResponse, SqlResponse} from "./models";
+import { AskRequest, AskResponse, ChatRequest, ChatResponse, SpeechTokenResponse, SqlResponse,
+  EvalResponse } from "./models";
 import { PineconeStore } from "langchain/vectorstores";
 import { OpenAIEmbeddings } from 'langchain/embeddings'
 import { PineconeClient } from "@pinecone-database/pinecone";
 import { ChatVectorDBQAChain } from 'langchain/chains'
 import { OpenAI } from 'langchain/llms'
+import { Any } from "@react-spring/web";
 
 export async function askApi(options: AskRequest, indexNs: string, indexType: string, chainType : string): Promise<AskResponse> {
     const response = await fetch('/ask', {
@@ -230,6 +232,9 @@ export async function chatGptApi(options: ChatRequest, indexNs: string, indexTyp
                     prompt_template_suffix: options.overrides?.promptTemplateSuffix,
                     suggest_followup_questions: options.overrides?.suggestFollowupQuestions,
                     embeddingModelType: options.overrides?.embeddingModelType,
+                    firstSession:options.overrides?.firstSession,
+                    session:options.overrides?.session,
+                    sessionId:options.overrides?.sessionId,
                   }
                 }
               }
@@ -243,6 +248,165 @@ export async function chatGptApi(options: ChatRequest, indexNs: string, indexTyp
         throw Error(parsedResponse.values[0].data.error || "Unknown error");
     }
     return parsedResponse.values[0].data;
+}
+export async function getAllIndexSessions(indexNs: string, indexType:string, feature:string, type:string): Promise<Any> {
+  const response = await fetch('/getAllIndexSessions' , {
+      method: "POST",
+      headers: {
+          "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        indexType:indexType,
+        indexNs: indexNs,
+        feature:feature,
+        type:type,
+      })
+  });
+
+  const parsedResponse: Any = await response.json();
+  if (response.status > 299 || !response.ok) {
+      throw Error("Unknown error");
+  }
+  return parsedResponse;
+}
+export async function getIndexSession(indexNs: string, indexType:string, sessionName:string): Promise<Any> {
+  const response = await fetch('/getIndexSession' , {
+      method: "POST",
+      headers: {
+          "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        indexType:indexType,
+        indexNs: indexNs,
+        sessionName:sessionName
+      })
+  });
+
+  const parsedResponse: any = await response.json();
+  if (response.status > 299 || !response.ok) {
+      throw Error("Unknown error");
+  }
+  return parsedResponse;
+}
+export async function deleteIndexSession(indexNs: string, indexType:string, sessionName:string): Promise<String> {
+  const response = await fetch('/deleteIndexSession' , {
+      method: "POST",
+      headers: {
+          "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        indexType:indexType,
+        indexNs: indexNs,
+        sessionName:sessionName
+      })
+  });
+
+  const parsedResponse: any = await response.json();
+  if (response.status > 299 || !response.ok) {
+      throw Error("Unknown error");
+  }
+  return parsedResponse;
+}
+export async function getDocumentList(): Promise<Any> {
+  const response = await fetch('/getDocumentList' , {
+      method: "GET",
+      headers: {
+          "Content-Type": "application/json"
+      },
+  });
+
+  const parsedResponse: any = await response.json();
+  if (response.status > 299 || !response.ok) {
+      throw Error("Unknown error");
+  }
+  return parsedResponse;
+}
+export async function getAllDocumentRuns(documentId: string): Promise<Any> {
+  const response = await fetch('/getAllDocumentRuns' , {
+      method: "POST",
+      headers: {
+          "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        documentId:documentId,
+      })
+  });
+
+  const parsedResponse: any = await response.json();
+  if (response.status > 299 || !response.ok) {
+      throw Error("Unknown error");
+  }
+  return parsedResponse;
+}
+export async function getEvaluationQaDataSet(documentId: string): Promise<Any> {
+  const response = await fetch('/getEvaluationQaDataSet' , {
+      method: "POST",
+      headers: {
+          "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        documentId:documentId,
+      })
+  });
+
+  const parsedResponse: any = await response.json();
+  if (response.status > 299 || !response.ok) {
+      throw Error("Unknown error");
+  }
+  return parsedResponse;
+}
+export async function getEvaluationResults(documentId: string, runId:string): Promise<Any> {
+  const response = await fetch('/getEvaluationResults' , {
+      method: "POST",
+      headers: {
+          "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        documentId:documentId,
+        runId:runId
+      })
+  });
+
+  const parsedResponse: any = await response.json();
+  if (response.status > 299 || !response.ok) {
+      throw Error("Unknown error");
+  }
+  return parsedResponse;
+}
+export async function renameIndexSession(oldSessionName: string, newSessionName:string): Promise<String> {
+  const response = await fetch('/renameIndexSession' , {
+      method: "POST",
+      headers: {
+          "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        oldSessionName:oldSessionName,
+        newSessionName: newSessionName
+      })
+  });
+
+  const parsedResponse: any = await response.json();
+  if (response.status > 299 || !response.ok) {
+      throw Error("Unknown error");
+  }
+  return parsedResponse;
+}
+export async function getIndexSessionDetail(sessionId: string): Promise<Any> {
+  const response = await fetch('/getIndexSessionDetail' , {
+      method: "POST",
+      headers: {
+          "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        sessionId:sessionId,
+      })
+  });
+
+  const parsedResponse: Any = await response.json();
+  if (response.status > 299 || !response.ok) {
+      throw Error("Unknown error");
+  }
+  return parsedResponse;
 }
 export async function chatGpt3Api(question: string, options: ChatRequest, indexNs: string, indexType:string): Promise<AskResponse> {
   const response = await fetch('/chat3', {
@@ -329,7 +493,6 @@ export async function refreshQuestions(indexType:string, indexName: string) : Pr
   }
   return result;
 }
-
 export async function refreshIndexQuestions(indexType:string) : Promise<any> {
   
   const response = await fetch('/refreshIndexQuestions' , {
@@ -358,7 +521,6 @@ export async function refreshIndexQuestions(indexType:string) : Promise<any> {
   }
   return result;
 }
-
 export async function kbQuestionManagement(documentsToDelete:any) : Promise<any> {
   
   const response = await fetch('/kbQuestionManagement' , {
@@ -387,7 +549,6 @@ export async function kbQuestionManagement(documentsToDelete:any) : Promise<any>
   }
   return result;
 }
-
 export async function uploadFile(fileName:string, fileContent:any, contentType:string) : Promise<string> {
   
   const response = await fetch('/uploadFile', {
@@ -410,6 +571,18 @@ export async function uploadFile(fileName:string, fileContent:any, contentType:s
 }
 export async function uploadBinaryFile(formData:any, indexName:string) : Promise<string> {
   const response = await fetch('/uploadBinaryFile', {
+    method: "POST",
+    body: formData
+  });
+
+  const result = await response.json();
+  if (response.status > 299 || !response.ok) {
+    return "Error";
+  }
+  return "Success";
+}
+export async function uploadEvaluatorFile(formData:any) : Promise<string> {
+  const response = await fetch('/uploadEvaluatorFile', {
     method: "POST",
     body: formData
   });
@@ -487,6 +660,40 @@ export async function processDoc(indexType: string, loadType : string, multiple:
   // }
   
   // return "Success";
+}
+export async function runEvaluation(overlap: string[], chunkSize : string[], splitMethod: string[], totalQuestions : string, model: string,
+  embeddingModelType : string, promptStyle : string, fileName : string, retrieverType : string) : Promise<string> {
+  const response = await fetch('/runEvaluation', {
+    method: "POST",
+    headers: {
+        "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      fileName:fileName,
+      retrieverType: retrieverType,
+      promptStyle:promptStyle,
+      totalQuestions:totalQuestions,
+      embeddingModelType:embeddingModelType,
+      postBody: {
+        values: [
+          {
+            recordId: 0,
+            data: {
+              splitMethods: splitMethod,
+              chunkSizes: chunkSize,
+              overlaps : overlap,
+            }
+          }
+        ]
+      }
+    })
+  });
+
+  const parsedResponse: EvalResponse = await response.json();
+  if (response.status > 299 || !response.ok) {
+      return "Error";
+  }
+  return parsedResponse.values[0].data.statusUri
 }
 export async function processSummary(loadType : string, multiple: string, files: any,
   embeddingModelType: string, chainType:string) : Promise<AskResponse> {
@@ -720,6 +927,36 @@ export async function sqlChain(question:string, top: number, embeddingModelType:
   }
   return parsedResponse.values[0].data
 }
+
+export async function sqlVisual(question:string, top: number, embeddingModelType:string): Promise<SqlResponse> {
+  const response = await fetch('/sqlVisual' , {
+      method: "POST",
+      headers: {
+          "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        question:question,
+        top:top,
+        embeddingModelType:embeddingModelType,
+        postBody: {
+          values: [
+            {
+              recordId: 0,
+              data: {
+                text: ''
+              }
+            }
+          ]
+        }
+      })
+});
+
+const parsedResponse: ChatResponse = await response.json();
+if (response.status > 299 || !response.ok) {
+    throw Error("Unknown error");
+}
+return parsedResponse.values[0].data
+}
 export async function verifyPassword(passType:string, password: string): Promise<string> {
   const response = await fetch('/verifyPassword' , {
       method: "POST",
@@ -752,7 +989,6 @@ export async function verifyPassword(passType:string, password: string): Promise
       return 'Success';
     }
 }
-
 export async function getSpeechToken(): Promise<SpeechTokenResponse> {
   const response = await fetch('/speechToken' , {
       method: "POST",
@@ -804,7 +1040,6 @@ export async function summarizer(options: AskRequest, requestText: string, promp
   }
   return parsedResponse.values[0].data.text
 }
-
 export async function summaryAndQa(indexType: string, indexNs:string, embeddingModelType: string, requestType: string, 
   chainType:string): Promise<string> {
   const response = await fetch('/summaryAndQa' , {
@@ -844,7 +1079,6 @@ export async function summaryAndQa(indexType: string, indexNs:string, embeddingM
   else
     return ''
 }
-
 export async function textAnalytics(documentText: string): Promise<string> {
   const response = await fetch('/textAnalytics' , {
       method: "POST",
@@ -862,7 +1096,6 @@ export async function textAnalytics(documentText: string): Promise<string> {
   }
   return parsedResponse.TextAnalytics
 }
-
 export async function getSpeechApi(text: string): Promise<string|null> {
   return await fetch("/speech", {
       method: "POST",

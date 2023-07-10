@@ -699,7 +699,7 @@ const OneShot = () => {
                     >
                             <div className={styles.oneshotTopSection}>
                                 <div className={styles.commandsContainer}>
-                                    <ClearChatButton className={styles.settingsButton} onClick={clearChat} disabled={!lastQuestionRef.current || isLoading} />
+                                    <ClearChatButton className={styles.settingsButton}  text="Clear chat" onClick={clearChat} disabled={!lastQuestionRef.current || isLoading} />
                                     <SettingsButton className={styles.settingsButton} onClick={() => setIsConfigPanelOpen(!isConfigPanelOpen)} />
                                     <QuestionListButton className={styles.settingsButton} onClick={() => clickRefreshQuestions()} />
                                     <div className={styles.settingsButton}>{selectedItem ? 
@@ -773,7 +773,7 @@ const OneShot = () => {
                                 isFooterAtBottom={true}
                             >
                                 <br/>
-                                <Label>Double Click the question from the KB to get the cached answer</Label>
+                                <Label>Click the question from the KB to get the cached answer</Label>
                                 <div>
                                     <DetailsList
                                         compact={true}
@@ -783,7 +783,7 @@ const OneShot = () => {
                                         getKey={(item: any) => item.key}
                                         setKey="none"
                                         constrainMode={ConstrainMode.unconstrained}
-                                        onItemInvoked={(item:any) => onQuestionClicked(item)}
+                                        onActiveItemChanged={(item:any) => onQuestionClicked(item)}
                                         focusZoneProps={focusZoneProps}
                                         layoutMode={DetailsListLayoutMode.justified}
                                         ariaLabelForSelectionColumn="Toggle selection"
@@ -914,8 +914,8 @@ const OneShot = () => {
                                     onChange={onEnableAutoSpeakAnswersChange}
                                 />
                                 <br/>
-                                <DefaultButton onClick={() => refreshSummary('summary')}>Regenerate Summary</DefaultButton>
-                                <DefaultButton onClick={() => refreshSummary('qa')}>Regenerate Qa</DefaultButton>
+                                {/* <DefaultButton onClick={() => refreshSummary('summary')}>Regenerate Summary</DefaultButton>
+                                <DefaultButton onClick={() => refreshSummary('qa')}>Regenerate Qa</DefaultButton> */}
                             </Panel>
                     </PivotItem>
                     <PivotItem
@@ -926,7 +926,7 @@ const OneShot = () => {
                     >
                             <div className={styles.oneshotTopSection}>
                                 <div className={styles.commandsContainer}>
-                                    <ClearChatButton className={styles.settingsButton} onClick={clearAgentChat} disabled={!lastAgentQuestionRef.current || isLoading} />
+                                    <ClearChatButton className={styles.settingsButton}  text="Clear chat" onClick={clearAgentChat} disabled={!lastAgentQuestionRef.current || isLoading} />
                                     <SettingsButton className={styles.settingsButton} onClick={() => setIsConfigPanelOpen(!isConfigPanelOpen)} />
                                 </div>
                                 <div className={styles.commandsContainer}>
@@ -1084,7 +1084,7 @@ const OneShot = () => {
                     >
                             <div className={styles.oneshotTopSection}>
                                 <div className={styles.commandsContainer}>
-                                    <ClearChatButton className={styles.settingsButton} onClick={clearTaskAgentChat} disabled={!lastTaskAgentQuestionRef.current || isLoading} />
+                                    <ClearChatButton className={styles.settingsButton}  text="Clear chat" onClick={clearTaskAgentChat} disabled={!lastTaskAgentQuestionRef.current || isLoading} />
                                     <SettingsButton className={styles.settingsButton} onClick={() => setIsConfigPanelOpen(!isConfigPanelOpen)} />
                                 </div>
                                 <div className={styles.commandsContainer}>

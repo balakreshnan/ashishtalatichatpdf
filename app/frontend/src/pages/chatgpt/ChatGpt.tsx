@@ -1,21 +1,31 @@
-import { useRef, useState, useEffect } from "react";
-import { Checkbox, Panel, DefaultButton, TextField, SpinButton, Spinner, List } from "@fluentui/react";
-import { SparkleFilled, BarcodeScanner24Filled } from "@fluentui/react-icons";
+import { useRef, useState, useEffect, useMemo } from "react";
+import { Checkbox, Panel, DefaultButton, TextField, SpinButton, Spinner, mergeStyles } from "@fluentui/react";
+import { SparkleFilled } from "@fluentui/react-icons";
 
-import { Dropdown, DropdownMenuItemType, IDropdownStyles, IDropdownOption } from '@fluentui/react/lib/Dropdown';
-import { IStyleSet, ILabelStyles, IPivotItemProps, Pivot, PivotItem } from '@fluentui/react';
+import { Dropdown, IDropdownStyles, IDropdownOption } from '@fluentui/react/lib/Dropdown';
+import { Pivot, PivotItem } from '@fluentui/react';
 
 import styles from "./ChatGpt.module.css";
 import { Label } from '@fluentui/react/lib/Label';
 import { ExampleList, ExampleModel } from "../../components/Example";
 
-import { chatGptApi, chatGpt3Api, Approaches, AskResponse, ChatRequest, ChatTurn, refreshIndex, getSpeechApi  } from "../../api";
+import { chatGptApi, chatGpt3Api, Approaches, AskResponse, ChatRequest, ChatTurn, refreshIndex, getSpeechApi, 
+    getAllIndexSessions, getIndexSession, getIndexSessionDetail, deleteIndexSession, renameIndexSession } from "../../api";
 import { Answer, AnswerError, AnswerLoading } from "../../components/Answer";
 import { QuestionInput } from "../../components/QuestionInput";
 import { UserChatMessage } from "../../components/UserChatMessage";
 import { AnalysisPanel, AnalysisPanelTabs } from "../../components/AnalysisPanel";
 import { ClearChatButton } from "../../components/ClearChatButton";
 import { SettingsButton } from "../../components/SettingsButton";
+import { ChatSession } from "../../api/models";
+import { DetailsList, DetailsListLayoutMode, SelectionMode, ConstrainMode, IDetailsListProps, 
+    IDetailsRowStyles, DetailsRow, Selection, IObjectWithKey} from '@fluentui/react/lib/DetailsList';
+import { SessionButton } from "../../components/SessionButton";
+import { mergeStyleSets } from '@fluentui/react/lib/Styling';
+import { MarqueeSelection } from '@fluentui/react/lib/MarqueeSelection';
+import { Text } from "@fluentui/react";
+import { Delete24Regular } from "@fluentui/react-icons";
+import { RenameButton } from "../../components/RenameButton";
 
 var audio = new Audio();
 
@@ -47,11 +57,13 @@ const ChatGpt = () => {
     const [activeAnalysisPanelTab, setActiveAnalysisPanelTab] = useState<AnalysisPanelTabs | undefined>(undefined);
 
     const [selectedAnswer, setSelectedAnswer] = useState<number>(0);
-    //const [answers, setAnswers] = useState<[user: string, response: AskResponse][]>([]);
     const [answers, setAnswers] = useState<[user: string, response: AskResponse, speechUrl: string | null][]>([]);
     const [runningIndex, setRunningIndex] = useState<number>(-1);
-    //const [answers3, setAnswers3] = useState<[user: string, response: AskResponse][]>([]);
     const [answers3, setAnswers3] = useState<[user: string, response: AskResponse, speechUrl: string | null][]>([]);
+    
+    const [chatSession, setChatSession] = useState<ChatSession | null>(null);
+    const [sessionId, setSessionId] = useState<string>();
+    const [sessionList, setSessionList] = useState<any[]>();
 
     const [exampleLoading, setExampleLoading] = useState(false)
 
@@ -62,6 +74,51 @@ const ChatGpt = () => {
     const [qa, setQa] = useState<string>('');
 
     const [selectedEmbeddingItem, setSelectedEmbeddingItem] = useState<IDropdownOption>();
+    const [selectedItems, setSelectedItems] = useState<any[]>([]);
+    const [sessionName, setSessionName] = useState<string>('');
+
+    const generateQuickGuid = () => {
+        return Math.random().toString(36).substring(2, 15) +
+            Math.random().toString(36).substring(2, 15);
+    }
+
+    const classNames = mergeStyleSets({
+        header: {
+          margin: 0,
+        },
+        row: {
+          flex: '0 0 auto',
+        },
+        focusZone: {
+          height: '100%',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+        },
+        selectionZone: {
+          height: '100%',
+          overflow: 'hidden',
+        },
+        controlWrapper: {
+            display: 'flex',
+            flexWrap: 'wrap',
+        },
+    });
+
+    const focusZoneProps = {
+        className: classNames.focusZone,
+        'data-is-scrollable': 'true',
+    } as React.HTMLAttributes<HTMLElement>;
+    
+    const sessionListColumn = [
+        {
+          key: 'Session Name',
+          name: 'Session Name',
+          fieldName: 'Session Name',
+          minWidth: 100,
+          maxWidth: 200, 
+          isResizable: false,
+        }
+    ]
 
     const embeddingOptions = [
         {
@@ -78,7 +135,53 @@ const ChatGpt = () => {
         // }
     ]
 
+    const selection = useMemo(
+        () =>
+        new Selection({
+            onSelectionChanged: () => {
+            setSelectedItems(selection.getSelection());
+        },
+        selectionMode: SelectionMode.single,
+        }),
+    []);
+
+    const detailsList = useMemo(
+        () => (
+            <MarqueeSelection selection={selection}>
+                <DetailsList
+                    className={styles.example}
+                    items={sessionList || []}
+                    columns={sessionListColumn}
+                    selectionMode={SelectionMode.single}
+                    getKey={(item: any) => item.key}
+                    setKey="single"
+                    //isHeaderVisible={false}
+                    //constrainMode={ConstrainMode.unconstrained}
+                    onActiveItemChanged={(item:any) => onSessionClicked(item)}
+                    //focusZoneProps={focusZoneProps}
+                    layoutMode={DetailsListLayoutMode.fixedColumns}
+                    ariaLabelForSelectionColumn="Toggle selection"
+                    checkButtonAriaLabel="select row"
+                    selection={selection}
+                    selectionPreservedOnEmptyClick={false}
+                 />
+             </MarqueeSelection>
+         ),
+         [selection, sessionListColumn, sessionList]
+     );
+
     const makeApiRequest = async (question: string) => {
+        let  currentSession = chatSession;
+        let firstSession = false;
+        if (!lastQuestionRef.current || currentSession === null) {
+            currentSession = handleNewConversation();
+            firstSession = true;
+            let sessionLists = sessionList;
+            sessionLists?.unshift({
+                "Session Name": currentSession.sessionId,
+            });
+            setSessionList(sessionLists)
+        }
         lastQuestionRef.current = question;
 
         error && setError(undefined);
@@ -101,7 +204,10 @@ const ChatGpt = () => {
                     suggestFollowupQuestions: useSuggestFollowupQuestions,
                     tokenLength: tokenLength,
                     autoSpeakAnswers: useAutoSpeakAnswers,
-                    embeddingModelType: String(selectedEmbeddingItem?.key)
+                    embeddingModelType: String(selectedEmbeddingItem?.key),
+                    firstSession: firstSession,
+                    session: JSON.stringify(currentSession),
+                    sessionId: currentSession.sessionId
                 }
             };
             const result = await chatGptApi(request, String(selectedItem?.key), String(selectedIndex));
@@ -112,6 +218,33 @@ const ChatGpt = () => {
                 setAnswers([...answers, [question, result, speechUrl]]);
                 startOrStopSynthesis("gpt35", speechUrl, answers.length);
             }
+        } catch (e) {
+            setError(e);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const getCosmosSession = async (indexNs : string, indexType: string) => {
+
+        try {
+            await getAllIndexSessions(indexNs, indexType, 'chat', 'Session')
+            .then(async (response:any) => {
+                const sessionLists = []
+                if (response.length === 0) {
+                    sessionLists.push({
+                        "Session Name": "No Sessions found",
+                    });    
+                } else 
+                {
+                    for (const session of response) {
+                        sessionLists.push({
+                            "Session Name": session.name,
+                        });    
+                    }
+                }
+                setSessionList(sessionLists)
+            })
         } catch (e) {
             setError(e);
         } finally {
@@ -164,7 +297,53 @@ const ChatGpt = () => {
         error && setError(undefined);
         setActiveCitation(undefined);
         setActiveAnalysisPanelTab(undefined);
+        setChatSession(null)
         setAnswers([]);
+        setSelectedItems([])
+        setSessionName('');
+    };
+
+    const deleteSession = async () => {
+        const sessionName = String(selectedItems[0]?.['Session Name'])
+        if (sessionName === 'No Sessions found' || sessionName === "undefined") {
+            alert("Select Session to delete")
+        }
+        await deleteIndexSession(String(selectedItem?.key), String(selectedIndex), sessionName)
+            .then(async (sessionResponse:any) => {
+                const defaultKey = selectedItem?.key
+                indexMapping?.findIndex((item) => {
+                    if (item.key == defaultKey) {
+                        getCosmosSession(item?.key, item?.iType)
+                    }
+                })
+                clearChat();
+        })
+
+    };
+
+    const renameSession = async () => {
+        const oldSessionName = String(selectedItems[0]?.['Session Name'])
+        if (oldSessionName === 'No Sessions found' || oldSessionName === "undefined") {
+            alert("Select valid session to rename")
+        }
+        await renameIndexSession(oldSessionName, sessionName)
+            .then(async (sessionResponse:any) => {
+                const defaultKey = selectedItem?.key
+                indexMapping?.findIndex((item) => {
+                    if (item.key == defaultKey) {
+                        getCosmosSession(item?.key, item?.iType)
+                    }
+                })
+                clearChat();
+        })
+    };
+
+    const onSessionNameChange = (event: React.FormEvent<HTMLInputElement | HTMLTextAreaElement>, newValue?: string): void => {
+        const oldSessionName = String(selectedItems[0]?.['Session Name'])
+        if (newValue === undefined || newValue === "") {
+            alert("Provide session name")
+        }
+        setSessionName(newValue || oldSessionName);
     };
 
     const clearChat3 = () => {
@@ -266,6 +445,8 @@ const ChatGpt = () => {
                 setSummary(item.summary)
                 setQa(item.qa)
 
+                getCosmosSession(item?.key, item?.iType)
+
                 const sampleQuestion = []
                 const  questionList = item.qa.split("\\n")
                 for (const item of questionList) {
@@ -298,6 +479,7 @@ const ChatGpt = () => {
                 setSelectedIndex(item.iType)
                 setSummary(item.summary)
                 setQa(item.qa)
+                getCosmosSession(item?.key, item?.iType)
 
                 const sampleQuestion = []
 
@@ -316,6 +498,54 @@ const ChatGpt = () => {
             }
         })
     };
+
+    const onSessionClicked = async (sessionFromList: any) => {
+        //makeApiRequest(sessionFromList.name);
+        const sessionName = sessionFromList["Session Name"]
+        setSessionName(sessionName)
+        if (sessionName != "No Session Found") {
+            try {
+                await getIndexSession(String(selectedItem?.key), String(selectedIndex), sessionName)
+                .then(async (sessionResponse:any) => {
+                    const sessionId = sessionResponse[0].sessionId
+                    const newSession: ChatSession = {
+                        id: sessionResponse[0].id,
+                        type: sessionResponse[0].type,
+                        sessionId: sessionResponse[0].sessionId,
+                        name: sessionResponse[0].name,
+                        chainType: sessionResponse[0].chainType,
+                        feature: sessionResponse[0].feature,
+                        indexId: sessionResponse[0].indexId,
+                        indexType: sessionResponse[0].indexType,
+                        indexName: sessionResponse[0].indexName,
+                        llmModel: sessionResponse[0].llmModel,
+                        timestamp: sessionResponse[0].timestamp,
+                        tokenUsed: sessionResponse[0].tokenUsed,
+                        embeddingModelType: sessionResponse[0].embeddingModelType
+                      };
+                    setChatSession(newSession);
+                    await getIndexSessionDetail(sessionId)
+                    .then(async (response:any) => {
+                        const rows = response.reduce(function (rows: any[][], key: any, index: number) { 
+                            return (index % 2 == 0 ? rows.push([key]) 
+                            : rows[rows.length-1].push(key)) && rows;
+                        }, []);
+                        const sessionLists: [string, AskResponse, string | null][] = [];
+                        for (const session of rows)
+                        {
+                            sessionLists.push([session[0].content, session[1].content, null]);
+                        }
+                        lastQuestionRef.current = sessionLists[sessionLists.length - 1][0];
+                        setAnswers(sessionLists);
+                    })
+                })
+            } catch (e) {
+                setError(e);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+    }
 
     useEffect(() => {
         setOptions([])
@@ -360,10 +590,10 @@ const ChatGpt = () => {
     const onEmbeddingChange = (event?: React.FormEvent<HTMLDivElement>, item?: IDropdownOption): void => {
         setSelectedEmbeddingItem(item);
     };
-
+    
     const onShowCitation = (citation: string, index: number) => {
         if (citation.indexOf('http') > -1 || citation.indexOf('https') > -1) {
-            window.open(citation.replace('/content/', ''), '_blank');
+            window.open(citation.replace('/content/', '').trim(), '_blank');
         } else {
             if (activeCitation === citation && activeAnalysisPanelTab === AnalysisPanelTabs.CitationTab && selectedAnswer === index) {
                 setActiveAnalysisPanelTab(undefined);
@@ -373,6 +603,29 @@ const ChatGpt = () => {
             }
         }
         setSelectedAnswer(index);
+    };
+
+    const handleNewConversation = () => {
+        const sessId = generateQuickGuid(); //uuidv4();
+        setSessionId(sessId);
+
+        const newSession: ChatSession = {
+          id: generateQuickGuid(),
+          type: 'Session',
+          sessionId: sessId,
+          name: sessId,
+          chainType: 'stuff',
+          feature: 'chat',
+          indexId: String(selectedItem?.key),
+          indexType: String(selectedIndex),
+          indexName: String(selectedItem?.text),
+          llmModel: 'gpt3.5',
+          timestamp: String(new Date().getTime()),
+          tokenUsed: 0,
+          embeddingModelType: String(selectedEmbeddingItem?.key)
+        };
+        setChatSession(newSession);
+        return newSession;
     };
 
     const onToggleTab = (tab: AnalysisPanelTabs, index: number) => {
@@ -396,12 +649,20 @@ const ChatGpt = () => {
                         }}
                     >
                         <div className={styles.commandsContainer}>
-                            <ClearChatButton className={styles.commandButton} onClick={clearChat} disabled={!lastQuestionRef.current || isLoading} />
+                            <ClearChatButton className={styles.commandButton} onClick={clearChat}  text="Clear chat" disabled={!lastQuestionRef.current || isLoading} />
                             <SettingsButton className={styles.commandButton} onClick={() => setIsConfigPanelOpen(!isConfigPanelOpen)} />
                             <div className={styles.commandButton}>{selectedItem ? 
                                 "Document Name : "  + selectedItem.text : undefined}</div>
                         </div>
+                        <div className={styles.commandsContainer}>
+                            <SessionButton className={styles.commandButton} onClick={clearChat} />
+                            <ClearChatButton className={styles.commandButton} onClick={deleteSession}  text="Delete Session" disabled={false} />
+                            <RenameButton className={styles.commandButton}  onClick={renameSession}  text="Rename Session"/>
+                            <TextField className={styles.commandButton} value={sessionName} onChange={onSessionNameChange}
+                                styles={{root: {width: '200px'}}} />
+                        </div>
                          <div className={styles.chatRoot}>
+                            {detailsList}
                             <div className={styles.chatContainer}>
                                 {!lastQuestionRef.current ? (
                                     <div className={styles.chatEmptyState}>
@@ -567,26 +828,6 @@ const ChatGpt = () => {
                                     label="Automatically speak answers"
                                     onChange={onEnableAutoSpeakAnswersChange}
                                 />
-                                {/* <TextField className={styles.chatSettingsSeparator} label="Exclude category" onChange={onExcludeCategoryChanged} />
-                                <Checkbox
-                                    className={styles.chatSettingsSeparator}
-                                    checked={useSemanticRanker}
-                                    label="Use semantic ranker for retrieval"
-                                    onChange={onUseSemanticRankerChange}
-                                />
-                                <Checkbox
-                                    className={styles.chatSettingsSeparator}
-                                    checked={useSemanticCaptions}
-                                    label="Use query-contextual summaries instead of whole documents"
-                                    onChange={onUseSemanticCaptionsChange}
-                                    disabled={!useSemanticRanker}
-                                />
-                                <Checkbox
-                                    className={styles.chatSettingsSeparator}
-                                    checked={useSuggestFollowupQuestions}
-                                    label="Suggest follow-up questions"
-                                    onChange={onUseSuggestFollowupQuestionsChange}
-                                /> */}
                             </Panel>
                         </div>
                     </PivotItem>
@@ -597,7 +838,7 @@ const ChatGpt = () => {
                         }}
                     >
                         <div className={styles.commandsContainer}>
-                            <ClearChatButton className={styles.commandButton} onClick={clearChat3} disabled={!lastQuestionRef3.current || isLoading} />
+                            <ClearChatButton className={styles.commandButton} onClick={clearChat3}  text="Clear chat" disabled={!lastQuestionRef3.current || isLoading} />
                             <SettingsButton className={styles.commandButton} onClick={() => setIsConfigPanelOpen(!isConfigPanelOpen)} />
                             <div className={styles.commandButton}>{selectedItem ? 
                                 "Document Name : "  + selectedItem.text : undefined}</div>
@@ -768,26 +1009,6 @@ const ChatGpt = () => {
                                     label="Automatically speak answers"
                                     onChange={onEnableAutoSpeakAnswersChange}
                                 />
-                                {/* <TextField className={styles.chatSettingsSeparator} label="Exclude category" onChange={onExcludeCategoryChanged} />
-                                <Checkbox
-                                    className={styles.chatSettingsSeparator}
-                                    checked={useSemanticRanker}
-                                    label="Use semantic ranker for retrieval"
-                                    onChange={onUseSemanticRankerChange}
-                                />
-                                <Checkbox
-                                    className={styles.chatSettingsSeparator}
-                                    checked={useSemanticCaptions}
-                                    label="Use query-contextual summaries instead of whole documents"
-                                    onChange={onUseSemanticCaptionsChange}
-                                    disabled={!useSemanticRanker}
-                                />
-                                <Checkbox
-                                    className={styles.chatSettingsSeparator}
-                                    checked={useSuggestFollowupQuestions}
-                                    label="Suggest follow-up questions"
-                                    onChange={onUseSuggestFollowupQuestionsChange}
-                                /> */}
                             </Panel>
                         </div>
                     </PivotItem>

@@ -17,6 +17,11 @@ try:
     else:
         KbIndexName = "aoaikb"
 
+    if "OpenAiEvaluatorContainer" in os.environ: 
+        OpenAiEvaluatorContainer = os.environ['OpenAiEvaluatorContainer']
+    else:
+        OpenAiEvaluatorContainer = "evaluator"
+
     if "OpenAiSummaryContainer" in os.environ: 
         OpenAiSummaryContainer = os.environ['OpenAiSummaryContainer']
     else:
@@ -76,6 +81,26 @@ try:
         BingKey = os.environ['BingKey']
     else:
         BingKey = ""
+
+    if "CosmosEndpoint" in os.environ: 
+        CosmosEndpoint = os.environ['CosmosEndpoint']
+    else:
+        CosmosEndpoint = ""
+
+    if "CosmosKey" in os.environ: 
+        CosmosKey = os.environ['CosmosKey']
+    else:
+        CosmosKey = ""
+    
+    if "CosmosDatabase" in os.environ: 
+        CosmosDatabase = os.environ['CosmosDatabase']
+    else:
+        CosmosDatabase = ""
+
+    if "CosmosContainer" in os.environ: 
+        CosmosContainer = os.environ['CosmosContainer']
+    else:
+        CosmosContainer = ""
 
     OpenAiEmbedding = os.environ['OpenAiEmbedding']
     UploadPassword = os.environ['UploadPassword'] or ''

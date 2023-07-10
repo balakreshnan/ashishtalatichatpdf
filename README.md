@@ -6,9 +6,13 @@ The repo provides a way to upload your own data so it's ready to try end to end.
 
 ## Updates
 
-* 6/18/2023 - Add the admin page supporting Knowledge base management.
+* 7/8/2023 - Added the feature to Rename the session for ChatGPT.   Also added the UI for the Evaluator Tool.  This feature focuses on performing the LLM based evaluation on your document. It auto-generates the test dataset (with Question and Answers) and perform the grading on that document using different parameters and generates the evaluation results.  It is built on [Azure Durable Functions](https://learn.microsoft.com/en-us/azure/azure-functions/durable/durable-functions-overview?tabs=csharp-inproc) and is implemented using the [Function Chaining](https://learn.microsoft.com/en-us/azure/azure-functions/durable/durable-functions-sequence?tabs=csharp) pattern. You will need to add `BLOB_EVALUATOR_CONTAINER_NAME` (ensure the same container name is created in storage account) and `RUNEVALUATION_URL`  (URL of the Durable function deployment) configuration in Azure Web App for existing deployment and if you want to use the Evaluator feature.  In the Azure function deployment add `AzureWebJobsFeatureFlags` (value EnableWorkerIndexing) and `OpenAiEvaluatorContainer` settings.
+* 7/5/2023 - Added the feature to Delete the session.  That feature requires the feature that is in [preview](https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/how-to-delete-by-partition-key?tabs=python-example) and you will need to enable that on the CosmosDB account on your subscription.  Added simple try/catch block in case if you have not enabled/deployed the CosmosDB to continue chatGPT implementation.
+* 7/4/2023 - Initial version of storing "Sessions" for GPT3.5/ChatGpt interface.  Session and messages are stored/retrieved from CosmosDb.  Make sure you have CosmosDb service provisioned or create a new one (for existing deployment).  You will need to add `CosmosEndpoint`, `CosmosKey`, `CosmosDatabase` and `CosmosContainer` settings in both Azure Functions App and Web App. 
+* 6/25/2023 - Notebook [showcasing](#qa-llm-evaluation) the evaluation of the answer quality in systematic way (auto generating questions and evaluation chain), supporting LLM QA settings (chunk size, overlap, embedding technique). Refer to [Evaluator](./Workshop/99_Evaluator.ipynb) notebook for more information.
+* 6/18/2023 - Add the admin page supporting Knowledge base management.  
 * 6/17/2023 - Added "Question List" button for Ask a question feature to display the list of all the questions that are in the Knowledge base.  Following three properties `SEARCHSERVICE`, `SEARCHKEY` and `KBINDEXNAME` (default value of aoaikb) needs to be added to Azure App Service to enable "Question List" button feature.
-* 6/16/2023 - Add the feature to use Azure Cognitive Search as Vector store for storing the cached Knowledge base.  The questions that are not in KB are sent to LLM model to find the answer via OAI, or else it is responded back from the Cached Datastore.  New Property `KbIndexName` needs to be added to Azure Function app.  Added the Notebook to test out the feature as part of the workshop. TODO : Add the feature to add the question to KB from the chat interface (and make it session based). A feature further to "regenerate" answer from LLM (instead of cached answer) will be added soon.  
+* 6/16/2023 - Add the feature to use Azure Cognitive Search as Vector store for storing the [cached Knowledge base](#qa-over-your-data-with-cache).  The questions that are not in KB are sent to LLM model to find the answer via OAI, or else it is responded back from the Cached Datastore.  New Property `KbIndexName` needs to be added to Azure Function app.  Added the Notebook to test out the feature as part of the workshop. TODO : Add the feature to add the question to KB from the chat interface (and make it session based). A feature further to "regenerate" answer from LLM (instead of cached answer) will be added soon.  
 * 6/7/2023 - Add OpenAI Playground in Developer Tools and initial version of building the CoPilot (for now with Notebook, but eventually will be moved as CoPilot feature).  Add the script, recording and example for Real-time Speech analytics use-case.  More to be added soon.
 * 5/27/2023 - Add Workshop content in the form of the notebooks that can be leveraged to learn/execute the scenarios.  You can find the notebooks in the [Workshop](Workshop) folder.  Details about workshop content is available [here](READMEWORKSHOP.md).
 * 5/26/2023 - Add Summarization feature to summarize the document either using stuff, mapreduce or refine summarization.  To use this feature (on existing deployment) ensure you add the `OpenAiSummaryContainer` configuration to Function app and `BLOB_SUMMARY_CONTAINER_NAME` configuration to Azure App Service (Ensure that the value you enter is the same as the container name in Azure storage and that you have created the container).  You also need to add `PROCESSSUMMARY_URL` configuration to Azure App Service (Ensure that the value you enter is the same as the Azure Function URL).
@@ -53,6 +57,14 @@ The repo provides a way to upload your own data so it's ready to try end to end.
 
 ![Azure Services](/assets/AskChat.png)
 
+## QA over your data with Cache
+
+![QA Cache](/assets/QACache.png)
+
+## QA LLM Evaluation
+
+![QA LLM Evaluation](/assets/Auto%20Evaluator.png)
+
 ## Getting Started
 
 [Get Started](GettingStarted.md)
@@ -72,4 +84,4 @@ The repo provides a way to upload your own data so it's ready to try end to end.
   
 ### Note
 
->Adapted from the Azure OpenAI Search repo at [OpenAI-CogSearch](https://github.com/Azure-Samples/azure-search-openai-demo/),  [Call Center Analytics](https://github.com/amulchapla/AI-Powered-Call-Center-Intelligence) and [Edgar Crawler](https://github.com/nlpaueb/edgar-crawler)
+>Adapted from the Azure OpenAI Search repo at [OpenAI-CogSearch](https://github.com/Azure-Samples/azure-search-openai-demo/),  [Call Center Analytics](https://github.com/amulchapla/AI-Powered-Call-Center-Intelligence), [Auto Evaluator](https://github.com/langchain-ai/auto-evaluator) and [Edgar Crawler](https://github.com/nlpaueb/edgar-crawler)

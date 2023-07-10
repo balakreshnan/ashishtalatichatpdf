@@ -1,4 +1,6 @@
+import datetime
 import logging, json, os
+import uuid
 import azure.functions as func
 import openai
 from langchain.embeddings.openai import OpenAIEmbeddings
@@ -15,6 +17,8 @@ from langchain.prompts import PromptTemplate
 from Utilities.envVars import *
 from langchain.agents import create_csv_agent
 from Utilities.azureBlob import getLocalBlob, getFullPath
+from azure.cosmos import CosmosClient, PartitionKey
+from langchain.callbacks import get_openai_callback
 
 def main(req: func.HttpRequest, context: func.Context) -> func.HttpResponse:
     logging.info(f'{context.function_name} HTTP trigger function processed a request.')
@@ -37,10 +41,11 @@ def main(req: func.HttpRequest, context: func.Context) -> func.HttpResponse:
         )
 
     if body:
-        pinecone.init(
-            api_key=PineconeKey,  # find at app.pinecone.io
-            environment=PineconeEnv  # next to api key in console
-        )
+        if len(PineconeKey) > 10 and len(PineconeEnv) > 10:
+            pinecone.init(
+                api_key=PineconeKey,  # find at app.pinecone.io
+                environment=PineconeEnv  # next to api key in console
+            )
         result = ComposeResponse(body, indexNs, indexType)
         return func.HttpResponse(result, mimetype="application/json")
     else:
@@ -137,13 +142,49 @@ def parseResponse(fullAnswer, sources):
                     modifiedAnswer = fullAnswer
                     nextQuestions = ''
             return modifiedAnswer, '', ''
-        
+
+def insertMessage(sessionId, type, role, totalTokens, tokens, response, cosmosContainer):
+    aiMessage = {
+        "id": str(uuid.uuid4()), 
+        "type": type, 
+        "role": role, 
+        "sessionId": sessionId, 
+        "tokens": tokens, 
+        "timestamp": datetime.datetime.utcnow().isoformat(), 
+        "content": response
+    }
+    cosmosContainer.create_item(body=aiMessage)
+
+
 def GetRrrAnswer(history, approach, overrides, indexNs, indexType):
     embeddingModelType = overrides.get('embeddingModelType') or 'azureopenai'
     topK = overrides.get("top") or 5
     temperature = overrides.get("temperature") or 0.3
     tokenLength = overrides.get('tokenLength') or 500
+    firstSession = overrides.get('firstSession') or False
+    sessionId = overrides.get('sessionId')
     logging.info("Search for Top " + str(topK))
+    try:
+        cosmosClient = CosmosClient(url=CosmosEndpoint, credential=CosmosKey)
+        cosmosDb = cosmosClient.create_database_if_not_exists(id=CosmosDatabase)
+        cosmosKey = PartitionKey(path="/sessionId")
+        cosmosContainer = cosmosDb.create_container_if_not_exists(id=CosmosContainer, partition_key=cosmosKey, offer_throughput=400)
+    except Exception as e:
+        logging.info("Error connecting to CosmosDB: " + str(e))
+
+    lastQuestion = history[-1]["user"]
+    totalTokens = 0
+
+    # If we are getting the new session, let's insert the data into CosmosDB
+    try:
+        if firstSession:
+            sessionInfo = overrides.get('session') or ''
+            session = json.loads(sessionInfo)
+            cosmosContainer.upsert_item(session)
+            logging.info(session)
+    except Exception as e:
+        logging.info("Error inserting session into CosmosDB: " + str(e))
+
 
     qaPromptTemplate = """Below is a history of the conversation so far, and a new question asked by the user that needs to be answered by searching in a knowledge base.
     Generate a search query based on the conversation and the new question.
@@ -160,7 +201,7 @@ def GetRrrAnswer(history, approach, overrides, indexNs, indexType):
 
     # STEP 1: Generate an optimized keyword search query based on the chat history and the last question
     optimizedPrompt = qaPromptTemplate.format(chat_history=getChatHistory(history, includeLastTurn=False),
-                                              question=history[-1]["user"])
+                                              question=lastQuestion)
 
     if (embeddingModelType == 'azureopenai'):
         baseUrl = f"https://{OpenAiService}.openai.azure.com"
@@ -169,7 +210,7 @@ def GetRrrAnswer(history, approach, overrides, indexNs, indexType):
         openai.api_version = OpenAiVersion
         openai.api_base = f"https://{OpenAiService}.openai.azure.com"
 
-        embeddings = OpenAIEmbeddings(model=OpenAiEmbedding, chunk_size=1, openai_api_key=OpenAiKey)
+        embeddings = OpenAIEmbeddings(deployment=OpenAiEmbedding, chunk_size=1, openai_api_key=OpenAiKey)
         llmChat = AzureChatOpenAI(
                     openai_api_base=baseUrl,
                     openai_api_version=OpenAiVersion,
@@ -208,13 +249,15 @@ def GetRrrAnswer(history, approach, overrides, indexNs, indexType):
     
     try:
         q = completion.choices[0].text
+        userToken = completion.usage.total_tokens
+        totalTokens = totalTokens + userToken
+        insertMessage(sessionId, "Message", "User", totalTokens, userToken, lastQuestion, cosmosContainer)
         logging.info("Question " + completion.choices[0].text)
         if (q == ''):
             q = history[-1]["user"]
     except Exception as e:
         q = history[-1]["user"]
         logging.info(e)
-
 
     try:
         logging.info("Execute step 2")
@@ -244,31 +287,35 @@ def GetRrrAnswer(history, approach, overrides, indexNs, indexType):
             vectorDb = Pinecone.from_existing_index(index_name=VsIndexName, embedding=embeddings, namespace=indexNs)
             docRetriever = vectorDb.as_retriever(search_kwargs={"namespace": indexNs, "k": topK})
             logging.info("Pinecone Setup done for indexName : " + indexNs)
-            qaChain = load_qa_with_sources_chain(llmChat, chain_type="stuff", 
-                                                    prompt=combinePrompt)
-            chain = RetrievalQAWithSourcesChain(combine_documents_chain=qaChain, retriever=docRetriever, 
+            with get_openai_callback() as cb:
+                qaChain = load_qa_with_sources_chain(llmChat, chain_type="stuff", 
+                                                        prompt=combinePrompt)
+                chain = RetrievalQAWithSourcesChain(combine_documents_chain=qaChain, retriever=docRetriever, 
                                                 return_source_documents=True)
-            historyText = getChatHistory(history, includeLastTurn=False)
-            answer = chain({"question": q, "summaries": historyText}, return_only_outputs=True)
-            docs = answer['source_documents']
-            rawDocs = []
-            for doc in docs:
-                rawDocs.append(doc.page_content)
-            thoughtPrompt = combinePrompt.format(question=q, summaries=rawDocs)
-            fullAnswer = answer['answer'].replace('ANSWER:', '').replace("Source:", 'SOURCES:').replace("Sources:", 'SOURCES:').replace("NEXT QUESTIONS:", 'Next Questions:')
-            sources = answer['sources'].replace("NEXT QUESTIONS:", 'Next Questions:')
-            modifiedAnswer, sources, nextQuestions = parseResponse(fullAnswer, sources)
-            if ((modifiedAnswer.find("I don't know") >= 0) or (modifiedAnswer.find("I'm not sure") >= 0)):
-                sources = ''
-                nextQuestions = ''
+                historyText = getChatHistory(history, includeLastTurn=False)
+                answer = chain({"question": q, "summaries": historyText}, return_only_outputs=True)
+                docs = answer['source_documents']
+                rawDocs = []
+                for doc in docs:
+                    rawDocs.append(doc.page_content)
+                thoughtPrompt = combinePrompt.format(question=q, summaries=rawDocs)
+                fullAnswer = answer['answer'].replace('ANSWER:', '').replace("Source:", 'SOURCES:').replace("Sources:", 'SOURCES:').replace("NEXT QUESTIONS:", 'Next Questions:')
+                sources = answer['sources'].replace("NEXT QUESTIONS:", 'Next Questions:')
+                modifiedAnswer, sources, nextQuestions = parseResponse(fullAnswer, sources)
+                if ((modifiedAnswer.find("I don't know") >= 0) or (modifiedAnswer.find("I'm not sure") >= 0)):
+                    sources = ''
+                    nextQuestions = ''
 
-            logging.info("Sources: " + sources)
-            logging.info('Next Questions: ' + nextQuestions)
+                response = {"data_points": rawDocs, "answer": modifiedAnswer.replace("Answer: ", ''), 
+                        "thoughts": f"<br><br>Prompt:<br>" + thoughtPrompt.replace('\n', '<br>'), 
+                        "sources": sources.replace("SOURCES:", '').replace("SOURCES", "").replace("Sources:", '').replace('- ', ''), 
+                        "nextQuestions": nextQuestions.replace('Next Questions:', '').replace('- ', ''), "error": ""}
+                try:
+                    insertMessage(sessionId, "Message", "Assistant", totalTokens, cb.total_tokens, response, cosmosContainer)
+                except Exception as e:
+                    logging.info("Error inserting message: " + str(e))
 
-            return {"data_points": rawDocs, "answer": modifiedAnswer.replace("Answer: ", ''), 
-                    "thoughts": f"<br><br>Prompt:<br>" + thoughtPrompt.replace('\n', '<br>'), 
-                    "sources": sources.replace("SOURCES:", '').replace("SOURCES", "").replace("Sources:", '').replace('- ', ''), 
-                    "nextQuestions": nextQuestions.replace('Next Questions:', '').replace('- ', ''), "error": ""}
+                return response
         elif indexType == "redis":
             try:
                 returnField = ["metadata", "content", "vector_score"]
@@ -282,18 +329,24 @@ def GetRrrAnswer(history, approach, overrides, indexNs, indexType):
                 for doc in docs:
                     rawDocs.append(doc.page_content)
                 thoughtPrompt = combinePrompt.format(question=q, summaries=rawDocs)
-                qaChain = load_qa_with_sources_chain(llmChat,
-                    chain_type="stuff", prompt=combinePrompt)
-                answer = qaChain({"input_documents": docs, "question": q}, return_only_outputs=True)
-                fullAnswer = answer['output_text'].replace('ANSWER:', '').replace("Source:", 'SOURCES:').replace("Sources:", 'SOURCES:').replace("NEXT QUESTIONS:", 'Next Questions:')
-                modifiedAnswer, sources, nextQuestions = parseResponse(fullAnswer, '')
-                if ((modifiedAnswer.find("I don't know") >= 0) or (modifiedAnswer.find("I'm not sure") >= 0)):
-                    sources = ''
-                    nextQuestions = ''
-                return {"data_points": rawDocs, "answer": modifiedAnswer.replace("Answer: ", ''), 
-                    "thoughts": f"<br><br>Prompt:<br>" + thoughtPrompt.replace('\n', '<br>'), 
-                    "sources": sources.replace("SOURCES:", '').replace("SOURCES", "").replace("Sources:", '').replace('- ', ''), 
-                    "nextQuestions": nextQuestions.replace('Next Questions:', '').replace('- ', ''), "error": ""}
+                with get_openai_callback() as cb:
+                    qaChain = load_qa_with_sources_chain(llmChat, chain_type="stuff", prompt=combinePrompt)
+                    answer = qaChain({"input_documents": docs, "question": q}, return_only_outputs=True)
+                    fullAnswer = answer['output_text'].replace('ANSWER:', '').replace("Source:", 'SOURCES:').replace("Sources:", 'SOURCES:').replace("NEXT QUESTIONS:", 'Next Questions:')
+                    modifiedAnswer, sources, nextQuestions = parseResponse(fullAnswer, '')
+                    if ((modifiedAnswer.find("I don't know") >= 0) or (modifiedAnswer.find("I'm not sure") >= 0)):
+                        sources = ''
+                        nextQuestions = ''
+                    response = {"data_points": rawDocs, "answer": modifiedAnswer.replace("Answer: ", ''), 
+                        "thoughts": f"<br><br>Prompt:<br>" + thoughtPrompt.replace('\n', '<br>'), 
+                        "sources": sources.replace("SOURCES:", '').replace("SOURCES", "").replace("Sources:", '').replace('- ', ''), 
+                        "nextQuestions": nextQuestions.replace('Next Questions:', '').replace('- ', ''), "error": ""}
+                    try:
+                        insertMessage(sessionId, "Message", "Assistant", totalTokens, cb.total_tokens, response, cosmosContainer)
+                    except Exception as e:
+                        logging.info("Error inserting message: " + str(e))
+
+                    return response
             except Exception as e:
                 return {"data_points": "", "answer": "Working on fixing Redis Implementation - Error : " + str(e), "thoughts": "",
                         "sources": '', "nextQuestions": '', "error": str(e)}
@@ -311,28 +364,40 @@ def GetRrrAnswer(history, approach, overrides, indexNs, indexType):
             for doc in docs:
                 rawDocs.append(doc.page_content)
             thoughtPrompt = optimizedPrompt.format(question=q, summaries=rawDocs)
-            qaChain = load_qa_with_sources_chain(llmChat,
-                    chain_type="stuff", prompt=combinePrompt)
-            answer = qaChain({"input_documents": docs, "question": q}, return_only_outputs=True)
-            fullAnswer = answer['output_text'].replace('ANSWER:', '').replace("Source:", 'SOURCES:').replace("Sources:", 'SOURCES:').replace("NEXT QUESTIONS:", 'Next Questions:')
-            modifiedAnswer, sources, nextQuestions = parseResponse(fullAnswer, '')
-            if ((modifiedAnswer.find("I don't know") >= 0) or (modifiedAnswer.find("I'm not sure") >= 0)):
-                sources = ''
-                nextQuestions = ''
+            with get_openai_callback() as cb:
+                qaChain = load_qa_with_sources_chain(llmChat, chain_type="stuff", prompt=combinePrompt)
+                answer = qaChain({"input_documents": docs, "question": q}, return_only_outputs=True)
+                fullAnswer = answer['output_text'].replace('ANSWER:', '').replace("Source:", 'SOURCES:').replace("Sources:", 'SOURCES:').replace("NEXT QUESTIONS:", 'Next Questions:')
+                modifiedAnswer, sources, nextQuestions = parseResponse(fullAnswer, '')
+                if ((modifiedAnswer.find("I don't know") >= 0) or (modifiedAnswer.find("I'm not sure") >= 0)):
+                    sources = ''
+                    nextQuestions = ''
 
-            logging.info(sources)
-            return {"data_points": rawDocs, "answer": modifiedAnswer.replace("Answer: ", ''), 
-                "thoughts": f"<br><br>Prompt:<br>" + thoughtPrompt.replace('\n', '<br>'), 
-                "sources": sources.replace("SOURCES:", '').replace("SOURCES", "").replace("Sources:", '').replace('- ', ''), 
-                "nextQuestions": nextQuestions.replace('Next Questions:', '').replace('- ', ''), "error": ""}
+                response = {"data_points": rawDocs, "answer": modifiedAnswer.replace("Answer: ", ''), 
+                    "thoughts": f"<br><br>Prompt:<br>" + thoughtPrompt.replace('\n', '<br>'), 
+                    "sources": sources.replace("SOURCES:", '').replace("SOURCES", "").replace("Sources:", '').replace('- ', ''), 
+                    "nextQuestions": nextQuestions.replace('Next Questions:', '').replace('- ', ''), "error": ""}
+                try:
+                    insertMessage(sessionId, "Message", "Assistant", totalTokens, cb.total_tokens, response, cosmosContainer)
+                except Exception as e:
+                    logging.info("Error inserting message: " + str(e))
+
+                return response
         elif indexType == "csv":
                 downloadPath = getLocalBlob(OpenAiDocConnStr, OpenAiDocContainer, '', indexNs)
                 agent = create_csv_agent(llmChat, downloadPath, verbose=True)
-                answer = agent.run(q)
-                sources = getFullPath(OpenAiDocConnStr, OpenAiDocContainer, os.path.basename(downloadPath))
-                return {"data_points": '', "answer": answer, 
-                            "thoughts": '',
-                                "sources": sources, "nextQuestions": '', "error": ""}
+                with get_openai_callback() as cb:
+                    answer = agent.run(q)
+                    sources = getFullPath(OpenAiDocConnStr, OpenAiDocContainer, os.path.basename(downloadPath))
+                    response = {"data_points": '', "answer": answer, 
+                                "thoughts": '',
+                                    "sources": sources, "nextQuestions": '', "error": ""}
+                    try:
+                        insertMessage(sessionId, "Message", "Assistant", totalTokens, cb.total_tokens, response, cosmosContainer)
+                    except Exception as e:
+                        logging.info("Error inserting message: " + str(e))
+                        
+                    return response
         elif indexType == 'milvus':
             answer = "{'answer': 'TBD', 'sources': ''}"
             return answer
