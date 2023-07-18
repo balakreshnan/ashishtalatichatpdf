@@ -12,6 +12,11 @@ try:
     OpenAiDocConnStr = f"DefaultEndpointsProtocol=https;AccountName={OpenAiDocStorName};AccountKey={OpenAiDocStorKey};EndpointSuffix=core.windows.net"
     OpenAiDocContainer = os.environ['OpenAiDocContainer']
 
+    if "OpenAiChat16k" in os.environ: 
+        OpenAiChat16k = os.getenv('OpenAiChat16k')
+    else:
+        OpenAiChat16k = "chat16k"
+
     if "KbIndexName" in os.environ: 
         KbIndexName = os.environ['KbIndexName']
     else:
@@ -27,6 +32,21 @@ try:
     else:
         OpenAiSummaryContainer = "summary"
 
+    if "FmpKey" in os.environ: 
+        FmpKey = os.getenv('FmpKey')
+    else:
+        FmpKey = ""
+    
+    if "SecExtractionUrl" in os.environ: 
+        SecExtractionUrl = os.getenv('SecExtractionUrl')
+    else:
+        SecExtractionUrl = ""
+
+    if "SecDocPersistUrl" in os.environ: 
+        SecDocPersistUrl = os.getenv('SecDocPersistUrl')
+    else:
+        SecDocPersistUrl = ""
+    
     if "SecDocContainer" in os.environ: 
         SecDocContainer = os.environ['SecDocContainer']
     else:
@@ -102,9 +122,20 @@ try:
     else:
         CosmosContainer = ""
 
-    OpenAiEmbedding = os.environ['OpenAiEmbedding']
-    UploadPassword = os.environ['UploadPassword'] or ''
-    AdminPassword = os.environ['AdminPassword'] or ''
+    if "OpenAiEmbedding" in os.environ: 
+        OpenAiEmbedding = os.environ['OpenAiEmbedding']
+    else:
+        OpenAiEmbedding = "embedding"
+
+    if "UploadPassword" in os.environ: 
+        UploadPassword = os.environ['UploadPassword']
+    else:
+        UploadPassword = "P@ssw0rd"
+
+    if "AdminPassword" in os.environ: 
+        AdminPassword = os.environ['AdminPassword']
+    else:
+        AdminPassword = "P@ssw0rd"
 
     if "ChromaUrl" in os.environ: 
         ChromaUrl = os.environ['ChromaUrl']

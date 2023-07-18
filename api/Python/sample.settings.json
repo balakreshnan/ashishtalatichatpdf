@@ -4,6 +4,8 @@
       "FUNCTIONS_WORKER_RUNTIME": "python",
       "AzureWebJobsFeatureFlags": "EnableWorkerIndexing",
       "DOCGENERATOR_URL": "http://localhost:7071/api/DocGenerator?code=",
+      "SecDocPersistUrl": "http://localhost:7071/api/SecDocPersist?code=",
+      "SecExtractionUrl": "http://localhost:7071/api/SecExtraction?code=",
       "AdminPassword": "P@ssw0rd", // Admin Password that is used for protected pages
       "UploadPassword": "P@ssw0rd", // Upload Password that is used for uploading files
       "AzureWebJobsStorage": "UseDevelopmentStorage=true",
@@ -11,11 +13,12 @@
       "OpenAiKey": "", // Azure Open AI Key
       "OpenAiService": "", // Name of Azure Open AI Service
       "OpenAiEndPoint": "", // FQDN of Azure Open AI Service
-      "OpenAiVersion": "2022-12-01",
+      "OpenAiVersion": "2023-05-15",
       "OpenAiDavinci": "", // Deployment name of Davinci-003
       "OpenAiEmbedding": "", // Deployment name of Ada-003
       "FormRecognizerEndPoint": "", // Form Recognizer Endpoint
       "FormRecognizerKey": "",  // Form Recognizer Key
+      "FmpKey":"", // Financial Modeling Prep Key
       "MaxTokens": 500, 
       "Temperature": 0.3,
       "CosmosEndpoint":"https://<>.documents.azure.com:443/",
@@ -23,6 +26,7 @@
       "CosmosDatabase":"aoai",
       "CosmosContainer":"chatgpt",
       "OpenAiChat": "", // GPT 3.5 deployment name
+      "OpenAiChat16k": "chat16k",
       "PineconeKey": "", // Pinecone key
       "PineconeEnv": "", // Pinecone Env
       "VsIndexName": "", // Index name

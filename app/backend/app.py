@@ -55,6 +55,27 @@ def ask():
         logging.exception("Exception in /ask")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/getPib", methods=["POST"])
+def getPib():
+    step=request.json["step"]
+    symbol=request.json["symbol"]
+    embeddingModelType=request.json["embeddingModelType"]
+    postBody=request.json["postBody"]
+ 
+    try:
+        headers = {'content-type': 'application/json'}
+        url = os.environ.get("PIB_URL")
+
+        data = postBody
+        params = {'step': step, 'symbol': symbol, 'embeddingModelType': embeddingModelType }
+        resp = requests.post(url, params=params, data=json.dumps(data), headers=headers)
+        jsonDict = json.loads(resp.text)
+        #return json.dumps(jsonDict)
+        return jsonify(jsonDict)
+    except Exception as e:
+        logging.exception("Exception in /getPib")
+        return jsonify({"error": str(e)}), 500
+    
 @app.route("/askAgent", methods=["POST"])
 def askAgent():
     postBody=request.json["postBody"]
@@ -404,6 +425,9 @@ def processDoc():
     existingIndexNs=request.json["existingIndexNs"]
     embeddingModelType=request.json["embeddingModelType"]
     textSplitter=request.json["textSplitter"]
+    chunkSize=request.json["chunkSize"]
+    chunkOverlap=request.json["chunkOverlap"]
+    promptType=request.json["promptType"]
     postBody=request.json["postBody"]
    
     try:
@@ -413,7 +437,8 @@ def processDoc():
         data = postBody
         params = {'indexType': indexType, "indexName": indexName, "multiple": multiple , "loadType": loadType,
                   "existingIndex": existingIndex, "existingIndexNs": existingIndexNs, "embeddingModelType": embeddingModelType,
-                  "textSplitter": textSplitter}
+                  "textSplitter": textSplitter, "chunkSize": chunkSize, "chunkOverlap": chunkOverlap,
+                  "promptType": promptType}
         resp = requests.post(url, params=params, data=json.dumps(data), headers=headers)
         jsonDict = json.loads(resp.text)
         #return json.dumps(jsonDict)
@@ -543,6 +568,21 @@ def refreshIndex():
         for blob in blobList:
             #print(blob)
             try:
+                try:
+                    promptType = blob.metadata["promptType"]
+                except:
+                    promptType = "generic"
+                
+                try:
+                    chunkSize = blob.metadata["chunkSize"]
+                except:
+                    chunkSize = "1500"
+
+                try:
+                    chunkOverlap = blob.metadata["chunkOverlap"]
+                except:
+                    chunkOverlap = "0"
+
                 blobJson.append({
                     "embedded": blob.metadata["embedded"],
                     "indexName": blob.metadata["indexName"],
@@ -551,6 +591,9 @@ def refreshIndex():
                     "summary":blob.metadata["summary"],
                     "name":blob.name,
                     "indexType":blob.metadata["indexType"],
+                    "promptType": promptType,
+                    "chunkSize": chunkSize,
+                    "chunkOverlap": chunkOverlap
                 })
             except Exception as e:
                 pass

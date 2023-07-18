@@ -22,6 +22,11 @@ try:
     else:
         OpenAiSummaryContainer = "summary"
 
+    if "OpenAiChat16k" in os.environ: 
+        OpenAiChat16k = os.getenv('OpenAiChat16k')
+    else:
+        OpenAiChat16k = "chat16k"
+
     if "SecDocContainer" in os.environ: 
         SecDocContainer = os.getenv('SecDocContainer')
     else:
@@ -135,5 +140,15 @@ try:
         SynapsePool = os.getenv('SynapsePool')
     else:
         SynapsePool = ""
+
+    if "SecExtractionUrl" in os.environ: 
+        SecExtractionUrl = os.getenv('SecExtractionUrl')
+    else:
+        SecExtractionUrl = "http://localhost:7071/api/SecExtraction?code="
+
+    if "SecDocPersistUrl" in os.environ: 
+        SecDocPersistUrl = os.getenv('SecDocPersistUrl')
+    else:
+        SecDocPersistUrl = "http://localhost:7071/api/SecDocPersist?code="
 except Exception as e:
     print("Error reading environment variables: " + str(e))
