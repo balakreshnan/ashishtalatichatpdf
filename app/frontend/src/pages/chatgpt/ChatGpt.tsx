@@ -4,35 +4,35 @@ import { SparkleFilled } from "@fluentui/react-icons";
 import { ShieldLockRegular } from "@fluentui/react-icons";
 
 import { Dropdown, IDropdownStyles, IDropdownOption } from '@fluentui/react/lib/Dropdown';
-import { Pivot, PivotItem } from '@fluentui/react';
 
 import styles from "./ChatGpt.module.css";
 import { Label } from '@fluentui/react/lib/Label';
 import { ExampleList, ExampleModel } from "../../components/Example";
 
-import { chatGptApi, chatGpt3Api, Approaches, AskResponse, ChatRequest, ChatTurn, refreshIndex, getSpeechApi, 
+import { chatGptApi, Approaches, AskResponse, ChatRequest, ChatTurn, refreshIndex, getSpeechApi, chatGpt,
     getAllIndexSessions, getIndexSession, getIndexSessionDetail, deleteIndexSession, renameIndexSession, getUserInfo } from "../../api";
 import { Answer, AnswerError, AnswerLoading } from "../../components/Answer";
+import { AnswerChat } from "../../components/Answer/AnswerChat";
 import { QuestionInput } from "../../components/QuestionInput";
 import { UserChatMessage } from "../../components/UserChatMessage";
 import { AnalysisPanel, AnalysisPanelTabs } from "../../components/AnalysisPanel";
 import { ClearChatButton } from "../../components/ClearChatButton";
 import { SettingsButton } from "../../components/SettingsButton";
 import { ChatSession } from "../../api/models";
-import { DetailsList, DetailsListLayoutMode, SelectionMode, ConstrainMode, IDetailsListProps, 
-    IDetailsRowStyles, DetailsRow, Selection, IObjectWithKey} from '@fluentui/react/lib/DetailsList';
+import { DetailsList, DetailsListLayoutMode, SelectionMode, Selection} from '@fluentui/react/lib/DetailsList';
 import { SessionButton } from "../../components/SessionButton";
 import { mergeStyleSets } from '@fluentui/react/lib/Styling';
 import { MarqueeSelection } from '@fluentui/react/lib/MarqueeSelection';
-import { Text } from "@fluentui/react";
-import { Delete24Regular } from "@fluentui/react-icons";
 import { RenameButton } from "../../components/RenameButton";
+import { Pivot, PivotItem } from '@fluentui/react';
 
 var audio = new Audio();
 
 const ChatGpt = () => {
     const [isConfigPanelOpen, setIsConfigPanelOpen] = useState(false);
+    const [isConfigPanelOpenGpt, setIsConfigPanelOpenGpt] = useState(false);
     const [promptTemplate, setPromptTemplate] = useState<string>("");
+    const [promptTemplateGpt, setPromptTemplateGpt] = useState<string>("");
     const [retrieveCount, setRetrieveCount] = useState<number>(3);
     const [useSemanticRanker, setUseSemanticRanker] = useState<boolean>(true);
     const [useSemanticCaptions, setUseSemanticCaptions] = useState<boolean>(false);
@@ -43,12 +43,14 @@ const ChatGpt = () => {
     const [options, setOptions] = useState<any>([])
     const [temperature, setTemperature] = useState<number>(0.3);
     const [tokenLength, setTokenLength] = useState<number>(500);
+    const [temperatureGpt, setTemperatureGpt] = useState<number>(0.7);
+    const [tokenLengthGpt, setTokenLengthGpt] = useState<number>(750);
 
     const [selectedItem, setSelectedItem] = useState<IDropdownOption>();
     const dropdownStyles: Partial<IDropdownStyles> = { dropdown: { width: 300 } };
 
     const lastQuestionRef = useRef<string>("");
-    const lastQuestionRef3 = useRef<string>("");
+    const lastQuestionRefGpt = useRef<string>("");
     const chatMessageStreamEnd = useRef<HTMLDivElement | null>(null);
 
     const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -60,11 +62,14 @@ const ChatGpt = () => {
     const [selectedAnswer, setSelectedAnswer] = useState<number>(0);
     const [answers, setAnswers] = useState<[user: string, response: AskResponse, speechUrl: string | null][]>([]);
     const [runningIndex, setRunningIndex] = useState<number>(-1);
-    const [answers3, setAnswers3] = useState<[user: string, response: AskResponse, speechUrl: string | null][]>([]);
+    const [answersGpt, setAnswersGpt] = useState<[user: string, response: string, speechUrl: string | null][]>([]);
     
     const [chatSession, setChatSession] = useState<ChatSession | null>(null);
+    const [chatSessionGpt, setChatSessionGpt] = useState<ChatSession | null>(null);
     const [sessionId, setSessionId] = useState<string>();
+    const [sessionIdGpt, setSessionIdGpt] = useState<string>();
     const [sessionList, setSessionList] = useState<any[]>();
+    const [sessionListGpt, setSessionListGpt] = useState<any[]>();
 
     const [exampleLoading, setExampleLoading] = useState(false)
 
@@ -75,17 +80,24 @@ const ChatGpt = () => {
     const [qa, setQa] = useState<string>('');
 
     const [selectedEmbeddingItem, setSelectedEmbeddingItem] = useState<IDropdownOption>();
+    const [selectedEmbeddingItemGpt, setSelectedEmbeddingItemGpt] = useState<IDropdownOption>();
     const [selectedItems, setSelectedItems] = useState<any[]>([]);
+    const [selectedItemsGpt, setSelectedItemsGpt] = useState<any[]>([]);
     const [sessionName, setSessionName] = useState<string>('');
     const [oldSessionName, setOldSessionName] = useState<string>('');
+    const [sessionNameGpt, setSessionNameGpt] = useState<string>('');
+    const [oldSessionNameGpt, setOldSessionNameGpt] = useState<string>('');
     const [showAuthMessage, setShowAuthMessage] = useState<boolean>(false);
     const [selectedDeploymentType, setSelectedDeploymentType] = useState<IDropdownOption>();
     const [selectedPromptTypeItem, setSelectedPromptTypeItem] = useState<IDropdownOption>();
+    const [selectedDeploymentTypeGpt, setSelectedDeploymentTypeGpt] = useState<IDropdownOption>();
+    const [selectedPromptTypeItemGpt, setSelectedPromptTypeItemGpt] = useState<IDropdownOption>();    
     const [selectedChunkSize, setSelectedChunkSize] = useState<string>()
     const [selectedChunkOverlap, setSelectedChunkOverlap] = useState<string>()
     const [selectedPromptType, setSelectedPromptType] = useState<string>()
     const [selectedChain, setSelectedChain] = useState<IDropdownOption>();
     const [chainTypeOptions, setChainTypeOptions] = useState<any>([])
+    const [useInternet, setUseInternet] = useState(false);
 
     const generateQuickGuid = () => {
         return Math.random().toString(36).substring(2, 15) +
@@ -128,8 +140,43 @@ const ChatGpt = () => {
           text: 'financial'
         },
         {
+            key: 'financialtable',
+            text: 'financialtable'
+        },
+        {
+            key: 'prospectus',
+            text: 'prospectus'
+        },
+        {
           key: 'insurance',
           text: 'insurance'
+        }
+    ]
+
+    const promptTypeGptOptions = [
+        {
+          key: 'custom',
+          text: 'custom'
+        },
+        {
+          key: 'linuxTerminal',
+          text: 'Linux Terminal'
+        },
+        {
+          key: 'accountant',
+          text: 'Accountant'
+        },
+        {
+          key: 'realEstateAgent',
+          text: 'Real Estate Agent'
+        },
+        {
+            key: 'careerCounseler',
+            text: 'Career Counseler'
+        },
+        {
+            key: 'personalTrainer',
+            text: 'Personal Trainer'
         }
     ]
 
@@ -143,11 +190,6 @@ const ChatGpt = () => {
           text: 'GPT 3.5 Turbo - 16k'
         }
     ]
-
-    const focusZoneProps = {
-        className: classNames.focusZone,
-        'data-is-scrollable': 'true',
-    } as React.HTMLAttributes<HTMLElement>;
     
     const sessionListColumn = [
         {
@@ -192,6 +234,16 @@ const ChatGpt = () => {
         }),
     []);
 
+    const selectionGpt = useMemo(
+        () =>
+        new Selection({
+            onSelectionChanged: () => {
+            setSelectedItemsGpt(selection.getSelection());
+        },
+        selectionMode: SelectionMode.single,
+        }),
+    []);
+
     const getUserInfoList = async () => {
         const userInfoList = await getUserInfo();
         if (userInfoList.length === 0 && window.location.hostname !== "localhost") {
@@ -226,6 +278,28 @@ const ChatGpt = () => {
          ),
          [selection, sessionListColumn, sessionList]
      );
+
+    const detailsListChat = useMemo(
+        () => (
+            <MarqueeSelection selection={selectionGpt}>
+                <DetailsList
+                    className={styles.example}
+                    items={sessionListGpt || []}
+                    columns={sessionListColumn}
+                    selectionMode={SelectionMode.single}
+                    getKey={(item: any) => item.key}
+                    setKey="single"
+                    onActiveItemChanged={(item:any) => onSessionGptClicked(item)}
+                    layoutMode={DetailsListLayoutMode.fixedColumns}
+                    ariaLabelForSelectionColumn="Toggle selection"
+                    checkButtonAriaLabel="select row"
+                    selection={selectionGpt}
+                    selectionPreservedOnEmptyClick={false}
+                 />
+             </MarqueeSelection>
+         ),
+         [selectionGpt, sessionListColumn, sessionListGpt]
+    );
 
     const onChainChange = (event: React.FormEvent<HTMLDivElement>, item?: IDropdownOption): void => {
         setSelectedChain(item);
@@ -288,6 +362,59 @@ const ChatGpt = () => {
         }
     };
 
+    const makeApiRequestGpt = async (question: string) => {
+        let  currentSession = chatSessionGpt;
+        let firstSession = false;
+        if (!lastQuestionRefGpt.current || currentSession === null) {
+            currentSession = handleNewConversationGpt()
+            firstSession = true;
+            let sessionLists = sessionListGpt;
+            sessionLists?.unshift({
+                "Session Name": currentSession.sessionId,
+            });
+            setSessionListGpt(sessionLists)
+        }
+        let promptTemplate = "";
+        if (firstSession) {
+            if (selectedPromptTypeItemGpt?.key == "custom")
+                setPromptTemplateGpt(question);
+
+            promptTemplate = question;
+        }
+        else {
+            promptTemplate = promptTemplateGpt;
+        }
+        lastQuestionRefGpt.current = question;
+
+        error && setError(undefined);
+        setIsLoading(true);
+
+        try {
+            const history: ChatTurn[] = answersGpt.map(a => ({ user: a[0], bot: a[1] }));
+            const request: ChatRequest = {
+                history: [...history, { user: question, bot: undefined }],
+                approach: Approaches.ReadRetrieveRead,
+                overrides: {
+                    promptTemplate: promptTemplate,
+                    temperature: temperatureGpt,
+                    tokenLength: tokenLengthGpt,
+                    embeddingModelType: String(selectedEmbeddingItemGpt?.key),
+                    firstSession: firstSession,
+                    session: JSON.stringify(currentSession),
+                    sessionId: currentSession.sessionId,
+                    deploymentType: String(selectedDeploymentTypeGpt?.key),
+                    useInternet:useInternet
+                }
+            };
+            const result = await chatGpt(request, 'chatgpt', 'cogsearchvs');
+            setAnswersGpt([...answersGpt, [question, result.answer, null]]);
+        } catch (e) {
+            setError(e);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const getCosmosSession = async (indexNs : string, indexType: string) => {
 
         try {
@@ -306,50 +433,12 @@ const ChatGpt = () => {
                         });    
                     }
                 }
-                setSessionList(sessionLists)
-            })
-        } catch (e) {
-            setError(e);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const makeApiRequest3 = async (question: string) => {
-        lastQuestionRef3.current = question;
-
-        error && setError(undefined);
-        setIsLoading(true);
-        setActiveCitation(undefined);
-        setActiveAnalysisPanelTab(undefined);
-
-        try {
-            const history: ChatTurn[] = answers3.map(a => ({ user: a[0], bot: a[1].answer }));
-            const request: ChatRequest = {
-                history: [...history, { user: question, bot: undefined }],
-                approach: Approaches.ReadRetrieveRead,
-                overrides: {
-                    promptTemplate: promptTemplate.length === 0 ? undefined : promptTemplate,
-                    excludeCategory: excludeCategory.length === 0 ? undefined : excludeCategory,
-                    top: retrieveCount,
-                    temperature: temperature,
-                    semanticRanker: useSemanticRanker,
-                    semanticCaptions: useSemanticCaptions,
-                    suggestFollowupQuestions: useSuggestFollowupQuestions,
-                    tokenLength: tokenLength,
-                    autoSpeakAnswers: useAutoSpeakAnswers,
-                    embeddingModelType: String(selectedEmbeddingItem?.key),
-                    deploymentType: String(selectedDeploymentType?.key),
-                    chainType: String(selectedChain?.key),
+                if (indexNs == "chatgpt") {
+                    setSessionListGpt(sessionLists)
+                } else {
+                    setSessionList(sessionLists)
                 }
-            };
-            const result = await chatGpt3Api(question, request, String(selectedItem?.key), String(selectedIndex));
-            setAnswers3([...answers3, [question, result, null]]);
-            if(useAutoSpeakAnswers){
-                const speechUrl = await getSpeechApi(result.answer);
-                setAnswers3([...answers3, [question, result, speechUrl]]);
-                startOrStopSynthesis("gpt3", speechUrl, answers.length);
-            }
+            })
         } catch (e) {
             setError(e);
         } finally {
@@ -366,6 +455,17 @@ const ChatGpt = () => {
         setAnswers([]);
         setSelectedItems([])
         setSessionName('');
+    };
+
+    const clearChatGpt = () => {
+        lastQuestionRefGpt.current = "";
+        error && setError(undefined);
+        setChatSessionGpt(null)
+        setAnswersGpt([]);
+        setSelectedItemsGpt([])
+        setSessionNameGpt('');
+        setSelectedPromptTypeItemGpt(promptTypeGptOptions[0])
+        setPromptTemplateGpt('')
     };
 
     const deleteSession = async () => {
@@ -387,8 +487,6 @@ const ChatGpt = () => {
     };
 
     const renameSession = async () => {
-        console.log(oldSessionName)
-        console.log(sessionName)
         //const oldSessionName = String(selectedItems[0]?.['Session Name'])
         if (oldSessionName === 'No Sessions found' || oldSessionName === undefined || sessionName === "" || sessionName === undefined
         || oldSessionName === "" || sessionName === 'No Sessions found') {
@@ -408,6 +506,32 @@ const ChatGpt = () => {
         }
     };
 
+    const deleteSessionGpt = async () => {
+        if (sessionNameGpt === 'No Sessions found' || sessionNameGpt === "" || sessionNameGpt === undefined) {
+            alert("Select Session to delete")
+        }
+        await deleteIndexSession("chatgpt", "cogsearchvs", sessionNameGpt)
+            .then(async (sessionResponse:any) => {
+                getCosmosSession("chatgpt", "cogsearchvs")
+                clearChatGpt();
+        })
+
+    };
+
+    const renameSessionGpt = async () => {
+        if (oldSessionNameGpt === 'No Sessions found' || oldSessionNameGpt === undefined || sessionNameGpt === "" || sessionNameGpt === undefined
+        || oldSessionNameGpt === "" || oldSessionNameGpt === 'No Sessions found') {
+            alert("Select valid session to rename")
+        }
+        else {
+            await renameIndexSession(oldSessionNameGpt, sessionNameGpt)
+                .then(async (sessionResponse:any) => {
+                    getCosmosSession("chatgpt", "cogsearchvs")
+                    clearChatGpt();
+            })
+        }
+    };
+
     const onSessionNameChange = (event: React.FormEvent<HTMLInputElement | HTMLTextAreaElement>, newValue?: string): void => {
         const oldSessionName = String(selectedItems[0]?.['Session Name'])
         if (newValue === undefined || newValue === "") {
@@ -416,12 +540,12 @@ const ChatGpt = () => {
         setSessionName(newValue || oldSessionName);
     };
 
-    const clearChat3 = () => {
-        lastQuestionRef3.current = "";
-        error && setError(undefined);
-        setActiveCitation(undefined);
-        setActiveAnalysisPanelTab(undefined);
-        setAnswers3([]);
+    const onSessionNameChangeGpt = (event: React.FormEvent<HTMLInputElement | HTMLTextAreaElement>, newValue?: string): void => {
+        const oldSessionNameGpt = String(selectedItemsGpt[0]?.['Session Name'])
+        if (newValue === undefined || newValue === "") {
+            alert("Provide session name")
+        }
+        setSessionNameGpt(newValue || oldSessionNameGpt);
     };
 
     const onEnableAutoSpeakAnswersChange = (_ev?: React.FormEvent<HTMLElement | HTMLInputElement>, checked?: boolean) => {
@@ -430,10 +554,6 @@ const ChatGpt = () => {
 
     const onExampleClicked = (example: string) => {
         makeApiRequest(example);
-    };
-
-    const onExampleClicked3 = (example: string) => {
-        makeApiRequest3(example);
     };
 
     const startOrStopSynthesis = async (answerType:string, url: string | null, index: number) => {
@@ -450,11 +570,7 @@ const ChatGpt = () => {
 
         if(url === null) {
             let speechAnswer;
-            if (answerType === 'gpt3') {
-                answers3.map((answer, index) => {
-                    speechAnswer = answer[1].answer
-                })    
-            } else if (answerType === 'gpt35') {
+            if (answerType === 'gpt35') {
                 answers.map((answer, index) => {
                     speechAnswer = answer[1].answer
                 })                
@@ -534,8 +650,8 @@ const ChatGpt = () => {
                 for (const item of questionList) {
                     if ((item != '')) {
                         sampleQuestion.push({
-                            text: item.replace(/[0-9]./g, ''),
-                            value: item.replace(/[0-9]./g, '')
+                            text: item.replace(/^\d+\.\s*/, '').replace('<', '').replace('>', ''),
+                            value: item.replace(/^\d+\.\s*/, '').replace('<', '').replace('>', '')
                         })
                     } 
                 }
@@ -550,7 +666,6 @@ const ChatGpt = () => {
     const onChange = (event?: React.FormEvent<HTMLDivElement>, item?: IDropdownOption): void => {
         setSelectedItem(item);
         clearChat();
-        clearChat3();
 
         const defaultKey = item?.key
         let indexType = 'pinecone'
@@ -579,8 +694,8 @@ const ChatGpt = () => {
                 for (const item of questionList) {
                     if ((item != '')) {
                         sampleQuestion.push({
-                            text: item.replace(/[0-9]./g, ''),
-                            value: item.replace(/[0-9]./g, '')
+                            text: item.replace(/^\d+\.\s*/, '').replace('<', '').replace('>', ''),
+                            value: item.replace(/^\d+\.\s*/, '').replace('<', '').replace('>', '')
                         })
                     } 
                 }
@@ -640,6 +755,55 @@ const ChatGpt = () => {
         }
     }
 
+    const onSessionGptClicked = async (sessionFromList: any) => {
+        //makeApiRequest(sessionFromList.name);
+        const sessionName = sessionFromList["Session Name"]
+        setSessionNameGpt(sessionName)
+        setOldSessionNameGpt(sessionName)
+        if (sessionName != "No Session Found") {
+            try {
+                await getIndexSession("chatgpt", "cogsearchvs", sessionName)
+                .then(async (sessionResponse:any) => {
+                    const sessionId = sessionResponse[0].sessionId
+                    const newSession: ChatSession = {
+                        id: sessionResponse[0].id,
+                        type: sessionResponse[0].type,
+                        sessionId: sessionResponse[0].sessionId,
+                        name: sessionResponse[0].name,
+                        chainType: sessionResponse[0].chainType,
+                        feature: sessionResponse[0].feature,
+                        indexId: sessionResponse[0].indexId,
+                        indexType: sessionResponse[0].indexType,
+                        indexName: sessionResponse[0].indexName,
+                        llmModel: sessionResponse[0].llmModel,
+                        timestamp: sessionResponse[0].timestamp,
+                        tokenUsed: sessionResponse[0].tokenUsed,
+                        embeddingModelType: sessionResponse[0].embeddingModelType
+                      };
+                    setChatSessionGpt(newSession);
+                    await getIndexSessionDetail(sessionId)
+                    .then(async (response:any) => {
+                        const rows = response.reduce(function (rows: any[][], key: any, index: number) { 
+                            return (index % 2 == 0 ? rows.push([key]) 
+                            : rows[rows.length-1].push(key)) && rows;
+                        }, []);
+                        const sessionLists: [string, string, string | null][] = [];
+                        for (const session of rows)
+                        {
+                            sessionLists.push([session[0].content, session[1].content, null]);
+                        }
+                        lastQuestionRefGpt.current = sessionLists[sessionLists.length - 1][0];
+                        setAnswersGpt(sessionLists);
+                    })
+                })
+            } catch (e) {
+                setError(e);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+    }
+
     const updatePrompt = (promptType: string) => {
         const genericPrompt = `Given the following extracted parts of a long document and a question, create a final answer. 
         If you don't know the answer, just say that you don't know. Don't try to make up an answer. 
@@ -661,16 +825,122 @@ const ChatGpt = () => {
         {summaries}
         Question: {question}
         `
+
+        const financialPrompt = `You are an AI assistant tasked with answering questions and summarizing information from 
+        earning call transcripts, annual reports, SEC filings and financial statements.
+        Your answer should accurately capture the key information in the document while avoiding the omission of any domain-specific words. 
+        Please generate a concise and comprehensive information that includes details such as reporting year and amount in millions.
+        Ensure that it is easy to understand for business professionals and provides an accurate representation of the financial statement history. 
+        
+        Please remember to use clear language and maintain the integrity of the original information without missing any important details
+
+        QUESTION: {question}
+        =========
+        {summaries}
+        =========
+        `
+
+        const financialTablePrompt = `You are an AI assistant tasked with answering questions and summarizing information from 
+        financial statements like income statement, cashflow and balance sheets. 
+        Additionally you may also be asked to answer questions about financial ratios and other financial metrics.
+        The data that you are presented will be in table format or structure.
+        Your answer should accurately capture the key information in the document while avoiding the omission of any domain-specific words. 
+        Please generate a concise and comprehensive information that includes details such as reporting year and amount in millions.
+        Ensure that it is easy to understand for business professionals and provides an accurate representation of the financial statement history. 
+        
+        Please remember to use clear language and maintain the integrity of the original information without missing any important details
+
+        QUESTION: {question}
+        =========
+        {summaries}
+        =========
+        `
+
+        const prospectusPrompt = `"""You are an AI assistant tasked with summarizing documents from large documents that contains information about Initial Public Offerings. 
+        IPO document contains sections with information about the company, its business, strategies, risk, management structure, financial, and other information.
+        Your summary should accurately capture the key information in the document while avoiding the omission of any domain-specific words. 
+        Please remember to use clear language and maintain the integrity of the original information without missing any important details:
+        QUESTION: {question}
+        =========
+        {summaries}
+        =========
+
+        """`
+
         if (promptType == "generic") {
             setPromptTemplate(genericPrompt)
         }
         else if (promptType == "medical") {
             setPromptTemplate(medicalPrompt)
+        } else if (promptType == "financial") {
+            setPromptTemplate(financialPrompt)
+        } else if (promptType == "financialtable") {
+            setPromptTemplate(financialTablePrompt)
+        } else if (promptType == "prospectus") {
+            setPromptTemplate(prospectusPrompt)
         } else if (promptType == "custom") {
             setPromptTemplate("")
         }
     }
 
+    const updatePromptGpt = (promptType: string) => {       
+        const linuxTerminal = `i want you to act as a linux terminal. I will type commands and you will reply with 
+        what the terminal should show. I want you to only reply with the terminal output inside one unique code block, 
+        and nothing else. do not write explanations. do not type commands unless I instruct you to do so. 
+        when i need to tell you something in english, i will do so by putting text inside curly brackets {like this}. 
+        my first command is pwd
+        `
+
+        const accountant = `I want you to act as an accountant and come up with creative ways to manage finances. 
+        You'll need to consider budgeting, investment strategies and risk management when creating a financial plan 
+        for your client. In some cases, you may also need to provide advice on taxation laws and regulations in 
+        order to help them maximize their profits. 
+        My first suggestion request is "Create a financial plan for a small business that focuses on cost savings and long-term investments".
+        `
+
+        const realEstateAgent = `I want you to act as a real estate agent. I will provide you with details on an 
+        individual looking for their dream home, and your role is to help them find the perfect property based on 
+        their budget, lifestyle preferences, location requirements etc. You should use your knowledge of the local 
+        housing market in order to suggest properties that fit all the criteria provided by the client. 
+        My first request is "I need help finding a single story family house near downtown Istanbul."
+        `
+
+        const careerCounseler = `I want you to act as a career counselor. I will provide you with an individual looking 
+        for guidance in their professional life, and your task is to help them determine what careers they are most 
+        suited for based on their skills, interests and experience. You should also conduct research into the various 
+        options available, explain the job market trends in different industries and advice on which qualifications
+        would be beneficial for pursuing particular fields. 
+        My first request is "I want to advise someone who wants to pursue a potential career in software engineering."
+        `
+        
+        const personalTrainer = `I want you to act as a personal trainer. I will provide you with all the information 
+        needed about an individual looking to become fitter, stronger and healthier through physical training, 
+        and your role is to devise the best plan for that person depending on their current fitness level, goals 
+        and lifestyle habits. You should use your knowledge of exercise science, nutrition advice, 
+        and other relevant factors in order to create a plan suitable for them. 
+        My first request is “I need help designing an exercise program for someone who wants to lose weight.”
+        `
+        if (promptType == "linuxTerminal") {
+            setPromptTemplateGpt(linuxTerminal)
+            makeApiRequestGpt(linuxTerminal)
+        }
+        else if (promptType == "accountant") {
+            setPromptTemplateGpt(accountant)
+            makeApiRequestGpt(accountant)
+        } else if (promptType == "realEstateAgent") {
+            setPromptTemplateGpt(realEstateAgent)
+            makeApiRequestGpt(realEstateAgent)
+        } else if (promptType == "careerCounseler") {
+            setPromptTemplateGpt(careerCounseler)
+            makeApiRequestGpt(careerCounseler)
+        } else if (promptType == "personalTrainer") {
+            setPromptTemplateGpt(personalTrainer)
+            makeApiRequestGpt(personalTrainer)
+        } else if (promptType == "custom") {
+            setPromptTemplateGpt("")
+        }
+    }
+    
     useEffect(() => {
         if (window.location.hostname != "localhost") {
             getUserInfoList();
@@ -684,6 +954,10 @@ const ChatGpt = () => {
         setSelectedChain(chainType[0])
         setSelectedEmbeddingItem(embeddingOptions[0])
         setSelectedDeploymentType(deploymentTypeOptions[0])
+        setSelectedEmbeddingItemGpt(embeddingOptions[0])
+        setSelectedDeploymentTypeGpt(deploymentTypeOptions[0])
+        setSelectedPromptTypeItem(promptTypeOptions[0])
+        setSelectedPromptTypeItemGpt(promptTypeGptOptions[0])
     }, [])
 
     useEffect(() => chatMessageStreamEnd.current?.scrollIntoView({ behavior: "smooth" }), [isLoading]);
@@ -692,20 +966,12 @@ const ChatGpt = () => {
         setPromptTemplate(newValue || "");
     };
 
+    const onPromptTemplateChangeGpt = (_ev?: React.FormEvent<HTMLInputElement | HTMLTextAreaElement>, newValue?: string) => {
+        setPromptTemplateGpt(newValue || "");
+    };
+
     const onRetrieveCountChange = (_ev?: React.SyntheticEvent<HTMLElement, Event>, newValue?: string) => {
         setRetrieveCount(parseInt(newValue || "3"));
-    };
-
-    const onUseSemanticRankerChange = (_ev?: React.FormEvent<HTMLElement | HTMLInputElement>, checked?: boolean) => {
-        setUseSemanticRanker(!!checked);
-    };
-
-    const onUseSemanticCaptionsChange = (_ev?: React.FormEvent<HTMLElement | HTMLInputElement>, checked?: boolean) => {
-        setUseSemanticCaptions(!!checked);
-    };
-
-    const onExcludeCategoryChanged = (_ev?: React.FormEvent, newValue?: string) => {
-        setExcludeCategory(newValue || "");
     };
 
     const onUseSuggestFollowupQuestionsChange = (_ev?: React.FormEvent<HTMLElement | HTMLInputElement>, checked?: boolean) => {
@@ -720,10 +986,22 @@ const ChatGpt = () => {
         setTokenLength(parseInt(newValue || "500"));
     };
 
+    const onTemperatureChangeGpt = (_ev?: React.SyntheticEvent<HTMLElement, Event>, newValue?: string) => {
+        setTemperatureGpt(parseInt(newValue || "0.3"));
+    };
+
+    const onTokenLengthChangeGpt = (_ev?: React.SyntheticEvent<HTMLElement, Event>, newValue?: string) => {
+        setTokenLengthGpt(parseInt(newValue || "500"));
+    };
+
     const onEmbeddingChange = (event?: React.FormEvent<HTMLDivElement>, item?: IDropdownOption): void => {
         setSelectedEmbeddingItem(item);
     };
     
+    const onEmbeddingChangeGpt = (event?: React.FormEvent<HTMLDivElement>, item?: IDropdownOption): void => {
+        setSelectedEmbeddingItemGpt(item);
+    };
+
     const onShowCitation = (citation: string, index: number) => {
         if (citation.indexOf('http') > -1 || citation.indexOf('https') > -1) {
             window.open(citation.replace('/content/', '').trim(), '_blank');
@@ -736,6 +1014,29 @@ const ChatGpt = () => {
             }
         }
         setSelectedAnswer(index);
+    };
+
+    const handleNewConversationGpt = () => {
+        const sessId = generateQuickGuid(); //uuidv4();
+        setSessionIdGpt(sessId);
+
+        const newSession: ChatSession = {
+          id: generateQuickGuid(),
+          type: 'Session',
+          sessionId: sessId,
+          name: sessId,
+          chainType: 'stuff',
+          feature: 'chat',
+          indexId: "chatgpt",
+          indexType: "cogsearchvs",
+          indexName: "Chat GPT",
+          llmModel: 'gpt3.5',
+          timestamp: String(new Date().getTime()),
+          tokenUsed: 0,
+          embeddingModelType: String(selectedEmbeddingItemGpt?.key)
+        };
+        setChatSessionGpt(newSession);
+        return newSession;
     };
 
     const handleNewConversation = () => {
@@ -765,11 +1066,33 @@ const ChatGpt = () => {
         setSelectedDeploymentType(item);
     };
 
+    const onDeploymentTypeChangeGpt = (event?: React.FormEvent<HTMLDivElement>, item?: IDropdownOption): void => {
+        setSelectedDeploymentTypeGpt(item);
+    };
+
     const onPromptTypeChange = (event?: React.FormEvent<HTMLDivElement>, item?: IDropdownOption): void => {
         setSelectedPromptTypeItem(item);
         updatePrompt(String(item?.key));
     };
 
+    const onPromptTypeChangeGpt = (event?: React.FormEvent<HTMLDivElement>, item?: IDropdownOption): void => {
+        clearChatGpt()
+        setSelectedPromptTypeItemGpt(item);
+        updatePromptGpt(String(item?.key));
+    };
+
+    const onUseInternetChanged = (ev?: React.FormEvent<HTMLElement | HTMLInputElement>, checked?: boolean): void => {
+        setUseInternet(!!checked);
+    };
+
+    const onTabChange = (item?: PivotItem | undefined, ev?: React.MouseEvent<HTMLElement, MouseEvent> | undefined): void => {
+        if (item?.props.headerText === "Chat On Data") {
+            getCosmosSession(String(selectedItem?.key), String(selectedIndex))
+        } 
+        if (item?.props.headerText === "Chat Gpt") {
+            getCosmosSession("chatgpt", "cogsearchvs")
+        } 
+    };
     const onToggleTab = (tab: AnalysisPanelTabs, index: number) => {
         if (activeAnalysisPanelTab === tab && selectedAnswer === index) {
             setActiveAnalysisPanelTab(undefined);
@@ -796,298 +1119,281 @@ const ChatGpt = () => {
                     <h2 className={styles.chatEmptyStateSubtitle} style={{fontSize: "20px"}}><strong>If you deployed in the last 10 minutes, please wait and reload the page after 10 minutes.</strong></h2>
                 </Stack>
             ) : (
-                <div className={styles.container}>
-                    <Pivot aria-label="Chat">
-                        <PivotItem
-                            headerText="GPT3.5"
-                            headerButtonProps={{
-                            'data-order': 1,
-                            }}
-                        >
-                            <div className={styles.commandsContainer}>
-                                <ClearChatButton className={styles.commandButton} onClick={clearChat}  text="Clear chat" disabled={!lastQuestionRef.current || isLoading} />
-                                <SettingsButton className={styles.commandButton} onClick={() => setIsConfigPanelOpen(!isConfigPanelOpen)} />
-                                <div className={styles.commandButton}>{selectedItem ? 
-                                    "Document Name : "  + selectedItem.text : undefined}</div>
-                            </div>
-                            <div className={styles.commandsContainer}>
-                                <SessionButton className={styles.commandButton} onClick={clearChat} />
-                                <ClearChatButton className={styles.commandButton} onClick={deleteSession}  text="Delete Session" disabled={false} />
-                                <RenameButton className={styles.commandButton}  onClick={renameSession}  text="Rename Session"/>
-                                <TextField className={styles.commandButton} value={sessionName} onChange={onSessionNameChange}
-                                    styles={{root: {width: '200px'}}} />
-                            </div>
-                            <div className={styles.chatRoot}>
-                                {detailsList}
-                                <div className={styles.chatContainer}>
-                                    {!lastQuestionRef.current ? (
-                                        <div className={styles.chatEmptyState}>
-                                            <SparkleFilled fontSize={"30px"} primaryFill={"rgba(115, 118, 225, 1)"} aria-hidden="true" aria-label="Chat logo" />
-                                            <h3 className={styles.chatEmptyStateTitle}>Chat with your data</h3>
-                                            <div className={styles.example}>
-                                                <p className={styles.exampleText}><b>Document Summary</b> : {summary}</p>
-                                            </div>
-                                            <h4 className={styles.chatEmptyStateSubtitle}>Ask anything or try from following example</h4>
-                                            <div className={styles.chatInput}>
-                                                <QuestionInput
-                                                    clearOnSend
-                                                    placeholder="Type a new question"
-                                                    disabled={isLoading}
-                                                    onSend={question => makeApiRequest(question)}
-                                                />
-                                            </div>
-                                            {exampleLoading ? <div><span>Please wait, Generating Sample Question</span><Spinner/></div> : null}
-                                            <ExampleList onExampleClicked={onExampleClicked}
-                                            EXAMPLES={
-                                                exampleList
-                                            } />
+                <Pivot aria-label="ChatGpt" onLinkClick={onTabChange}>
+                    <PivotItem
+                        headerText="Chat On Data"
+                        headerButtonProps={{
+                        'data-order': 1,
+                        }}
+                    >
+                    <div className={styles.root}>
+                        <br/>
+                        <div className={styles.commandsContainer}>
+                            <ClearChatButton className={styles.commandButton} onClick={clearChat}  text="Clear chat" disabled={!lastQuestionRef.current || isLoading} />
+                            <SettingsButton className={styles.commandButton} onClick={() => setIsConfigPanelOpen(!isConfigPanelOpen)} />
+                            <div className={styles.commandButton}>{selectedItem ? 
+                                "Document Name : "  + selectedItem.text : undefined}</div>
+                        </div>
+                        <div className={styles.commandsContainer}>
+                            <SessionButton className={styles.commandButton} onClick={clearChat} />
+                            <ClearChatButton className={styles.commandButton} onClick={deleteSession}  text="Delete Session" disabled={false} />
+                            <RenameButton className={styles.commandButton}  onClick={renameSession}  text="Rename Session"/>
+                            <TextField className={styles.commandButton} value={sessionName} onChange={onSessionNameChange}
+                                styles={{root: {width: '200px'}}} />
+                        </div>
+                        <div className={styles.chatRoot}>
+                            {detailsList}
+                            <div className={styles.chatContainer}>
+                                {!lastQuestionRef.current ? (
+                                    <div className={styles.chatEmptyState}>
+                                        <SparkleFilled fontSize={"30px"} primaryFill={"rgba(115, 118, 225, 1)"} aria-hidden="true" aria-label="Chat logo" />
+                                        <h3 className={styles.chatEmptyStateTitle}>Chat with your data</h3>
+                                        <div className={styles.example}>
+                                            <p className={styles.exampleText}><b>Document Summary</b> : {summary}</p>
                                         </div>
-                                    ) : (
-                                        <div className={styles.chatMessageStream}>
-                                            {answers.map((answer, index) => (
-                                                <div key={index}>
-                                                    <UserChatMessage message={answer[0]} />
-                                                    <div className={styles.chatMessageGpt}>
-                                                        <Answer
-                                                            key={index}
-                                                            answer={answer[1]}
-                                                            isSpeaking = {runningIndex === index}
-                                                            isSelected={selectedAnswer === index && activeAnalysisPanelTab !== undefined}
-                                                            onCitationClicked={c => onShowCitation(c, index)}
-                                                            onThoughtProcessClicked={() => onToggleTab(AnalysisPanelTabs.ThoughtProcessTab, index)}
-                                                            onSupportingContentClicked={() => onToggleTab(AnalysisPanelTabs.SupportingContentTab, index)}
-                                                            onFollowupQuestionClicked={q => makeApiRequest(q)}
-                                                            onSpeechSynthesisClicked={() => startOrStopSynthesis("gpt35", answer[2], index)}
-                                                            showFollowupQuestions={useSuggestFollowupQuestions && answers.length - 1 === index}
-                                                        />
-                                                    </div>
+                                        <h4 className={styles.chatEmptyStateSubtitle}>Ask anything or try from following example</h4>
+                                        <div className={styles.chatInput}>
+                                            <QuestionInput
+                                                clearOnSend
+                                                placeholder="Type a new question"
+                                                disabled={isLoading}
+                                                onSend={question => makeApiRequest(question)}
+                                            />
+                                        </div>
+                                        {exampleLoading ? <div><span>Please wait, Generating Sample Question</span><Spinner/></div> : null}
+                                        <ExampleList onExampleClicked={onExampleClicked}
+                                        EXAMPLES={
+                                            exampleList
+                                        } />
+                                    </div>
+                                ) : (
+                                    <div className={styles.chatMessageStream}>
+                                        {answers.map((answer, index) => (
+                                            <div key={index}>
+                                                <UserChatMessage message={answer[0]} />
+                                                <div className={styles.chatMessageGpt}>
+                                                    <Answer
+                                                        key={index}
+                                                        answer={answer[1]}
+                                                        isSpeaking = {runningIndex === index}
+                                                        isSelected={selectedAnswer === index && activeAnalysisPanelTab !== undefined}
+                                                        onCitationClicked={c => onShowCitation(c, index)}
+                                                        onThoughtProcessClicked={() => onToggleTab(AnalysisPanelTabs.ThoughtProcessTab, index)}
+                                                        onSupportingContentClicked={() => onToggleTab(AnalysisPanelTabs.SupportingContentTab, index)}
+                                                        onFollowupQuestionClicked={q => makeApiRequest(q)}
+                                                        onSpeechSynthesisClicked={() => startOrStopSynthesis("gpt35", answer[2], index)}
+                                                        showFollowupQuestions={useSuggestFollowupQuestions && answers.length - 1 === index}
+                                                    />
                                                 </div>
-                                            ))}
-                                            {isLoading && (
-                                                <>
-                                                    <UserChatMessage message={lastQuestionRef.current} />
-                                                    <div className={styles.chatMessageGptMinWidth}>
-                                                        <AnswerLoading />
-                                                    </div>
-                                                </>
-                                            )}
-                                            {error ? (
-                                                <>
-                                                    <UserChatMessage message={lastQuestionRef.current} />
-                                                    <div className={styles.chatMessageGptMinWidth}>
-                                                        <AnswerError error={error.toString()} onRetry={() => makeApiRequest(lastQuestionRef.current)} />
-                                                    </div>
-                                                </>
-                                            ) : null}
-                                            <div ref={chatMessageStreamEnd} />
-                                            <div className={styles.chatInput}>
-                                                <QuestionInput
-                                                    clearOnSend
-                                                    placeholder="Type a new question"
-                                                    disabled={isLoading}
-                                                    onSend={question => makeApiRequest(question)}
-                                                />
                                             </div>
+                                        ))}
+                                        {isLoading && (
+                                            <>
+                                                <UserChatMessage message={lastQuestionRef.current} />
+                                                <div className={styles.chatMessageGptMinWidth}>
+                                                    <AnswerLoading />
+                                                </div>
+                                            </>
+                                        )}
+                                        {error ? (
+                                            <>
+                                                <UserChatMessage message={lastQuestionRef.current} />
+                                                <div className={styles.chatMessageGptMinWidth}>
+                                                    <AnswerError error={error.toString()} onRetry={() => makeApiRequest(lastQuestionRef.current)} />
+                                                </div>
+                                            </>
+                                        ) : null}
+                                        <div ref={chatMessageStreamEnd} />
+                                        <div className={styles.chatInput}>
+                                            <QuestionInput
+                                                clearOnSend
+                                                placeholder="Type a new question"
+                                                disabled={isLoading}
+                                                onSend={question => makeApiRequest(question)}
+                                            />
                                         </div>
-                                    )}
-                                </div>
-
-                                {answers.length > 0 && activeAnalysisPanelTab && (
-                                    <AnalysisPanel
-                                        className={styles.chatAnalysisPanel}
-                                        activeCitation={activeCitation}
-                                        onActiveTabChanged={x => onToggleTab(x, selectedAnswer)}
-                                        citationHeight="810px"
-                                        answer={answers[selectedAnswer][1]}
-                                        activeTab={activeAnalysisPanelTab}
-                                    />
+                                    </div>
                                 )}
+                            </div>
 
-                                <Panel
-                                    headerText="Configure Chat Interaction"
-                                    isOpen={isConfigPanelOpen}
-                                    isBlocking={false}
-                                    onDismiss={() => setIsConfigPanelOpen(false)}
-                                    closeButtonAriaLabel="Close"
-                                    onRenderFooterContent={() => <DefaultButton onClick={() => setIsConfigPanelOpen(false)}>Close</DefaultButton>}
-                                    isFooterAtBottom={true}
-                                >
-                                    <br/>
-                                    <div>
-                                        <DefaultButton onClick={refreshBlob}>Refresh Docs</DefaultButton>
-                                        <Dropdown
-                                            selectedKey={selectedItem ? selectedItem.key : undefined}
-                                            // eslint-disable-next-line react/jsx-no-bind
-                                            onChange={onChange}
-                                            placeholder="Select an PDF"
-                                            options={options}
-                                            styles={dropdownStyles}
-                                        />
-                                        &nbsp;
-                                        <Label className={styles.commandsContainer}>Index Type : {selectedIndex}</Label>
-                                        <Label className={styles.commandsContainer}>Chunk Size : {selectedChunkSize} / Chunk Overlap : {selectedChunkOverlap}</Label>
-                                    </div>
-                                    <br/>
-                                    <div>
-                                        <Label>LLM Model</Label>
-                                        <Dropdown
-                                            selectedKey={selectedEmbeddingItem ? selectedEmbeddingItem.key : undefined}
-                                            onChange={onEmbeddingChange}
-                                            defaultSelectedKey="azureopenai"
-                                            placeholder="Select an LLM Model"
-                                            options={embeddingOptions}
-                                            disabled={false}
-                                            styles={dropdownStyles}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label>Deployment Type</Label>
-                                        <Dropdown
-                                                selectedKey={selectedDeploymentType ? selectedDeploymentType.key : undefined}
-                                                onChange={onDeploymentTypeChange}
-                                                //defaultSelectedKey="azureopenai"
-                                                placeholder="Select an Deployment Type"
-                                                options={deploymentTypeOptions}
-                                                disabled={((selectedEmbeddingItem?.key == "openai" ? true : false) || (Number(selectedChunkSize) > 4000 ? true : false))}
-                                                styles={dropdownStyles}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label>Prompt Type</Label>
-                                        <Dropdown
-                                                selectedKey={selectedPromptTypeItem ? selectedPromptTypeItem.key : undefined}
-                                                onChange={onPromptTypeChange}
-                                                //defaultSelectedKey="azureopenai"
-                                                placeholder="Prompt Type"
-                                                options={promptTypeOptions}
-                                                disabled={false}
-                                                styles={dropdownStyles}
-                                        />
-                                        <TextField
-                                            className={styles.oneshotSettingsSeparator}
-                                            value={promptTemplate}
-                                            label="Override prompt template"
-                                            multiline
-                                            autoAdjustHeight
-                                            onChange={onPromptTemplateChange}
-                                        />
-                                    </div>
-                                    {/* <TextField
-                                        className={styles.chatSettingsSeparator}
-                                        defaultValue={promptTemplate}
-                                        label="Override prompt template"
-                                        multiline
-                                        autoAdjustHeight
-                                        onChange={onPromptTemplateChange}
-                                    /> */}
+                            {answers.length > 0 && activeAnalysisPanelTab && (
+                                <AnalysisPanel
+                                    className={styles.chatAnalysisPanel}
+                                    activeCitation={activeCitation}
+                                    onActiveTabChanged={x => onToggleTab(x, selectedAnswer)}
+                                    citationHeight="810px"
+                                    answer={answers[selectedAnswer][1]}
+                                    activeTab={activeAnalysisPanelTab}
+                                />
+                            )}
 
-                                    <SpinButton
-                                        className={styles.chatSettingsSeparator}
-                                        label="Retrieve this many documents from search:"
-                                        min={1}
-                                        max={7}
-                                        defaultValue={retrieveCount.toString()}
-                                        onChange={onRetrieveCountChange}
-                                    />
-                                    <SpinButton
-                                        className={styles.oneshotSettingsSeparator}
-                                        label="Set the Temperature:"
-                                        min={0.0}
-                                        max={1.0}
-                                        defaultValue={temperature.toString()}
-                                        onChange={onTemperatureChange}
-                                    />
-                                    <SpinButton
-                                        className={styles.oneshotSettingsSeparator}
-                                        label="Max Length (Tokens):"
-                                        min={0}
-                                        max={4000}
-                                        defaultValue={tokenLength.toString()}
-                                        onChange={onTokenLengthChange}
-                                    />
-                                     <Dropdown 
-                                        label="Chain Type"
-                                        onChange={onChainChange}
-                                        selectedKey={selectedChain ? selectedChain.key : 'stuff'}
-                                        options={chainTypeOptions}
-                                        defaultSelectedKey={'stuff'}
+                            <Panel
+                                headerText="Configure Chat Interaction"
+                                isOpen={isConfigPanelOpen}
+                                isBlocking={false}
+                                onDismiss={() => setIsConfigPanelOpen(false)}
+                                closeButtonAriaLabel="Close"
+                                onRenderFooterContent={() => <DefaultButton onClick={() => setIsConfigPanelOpen(false)}>Close</DefaultButton>}
+                                isFooterAtBottom={true}
+                            >
+                                <br/>
+                                <div>
+                                    <DefaultButton onClick={refreshBlob}>Refresh Docs</DefaultButton>
+                                    <Dropdown
+                                        selectedKey={selectedItem ? selectedItem.key : undefined}
+                                        // eslint-disable-next-line react/jsx-no-bind
+                                        onChange={onChange}
+                                        placeholder="Select an PDF"
+                                        options={options}
                                         styles={dropdownStyles}
                                     />
-                                    <Checkbox
-                                        className={styles.chatSettingsSeparator}
-                                        checked={useSuggestFollowupQuestions}
-                                        label="Suggest follow-up questions"
-                                        onChange={onUseSuggestFollowupQuestionsChange}
+                                    &nbsp;
+                                    <Label className={styles.commandsContainer}>Index Type : {selectedIndex}</Label>
+                                    <Label className={styles.commandsContainer}>Chunk Size : {selectedChunkSize} / Chunk Overlap : {selectedChunkOverlap}</Label>
+                                </div>
+                                <br/>
+                                <div>
+                                    <Label>LLM Model</Label>
+                                    <Dropdown
+                                        selectedKey={selectedEmbeddingItem ? selectedEmbeddingItem.key : undefined}
+                                        onChange={onEmbeddingChange}
+                                        placeholder="Select an LLM Model"
+                                        options={embeddingOptions}
+                                        disabled={false}
+                                        styles={dropdownStyles}
                                     />
-                                    <Checkbox
-                                        className={styles.chatSettingsSeparator}
-                                        checked={useAutoSpeakAnswers}
-                                        label="Automatically speak answers"
-                                        onChange={onEnableAutoSpeakAnswersChange}
+                                </div>
+                                <div>
+                                    <Label>Deployment Type</Label>
+                                    <Dropdown
+                                            selectedKey={selectedDeploymentType ? selectedDeploymentType.key : undefined}
+                                            onChange={onDeploymentTypeChange}
+                                            placeholder="Select an Deployment Type"
+                                            options={deploymentTypeOptions}
+                                            disabled={((selectedEmbeddingItem?.key == "openai" ? true : false) || (Number(selectedChunkSize) > 4000 ? true : false))}
+                                            styles={dropdownStyles}
                                     />
-                                </Panel>
-                            </div>
-                        </PivotItem>
-                        {/* <PivotItem
-                            headerText="GPT3"
-                            headerButtonProps={{
-                            'data-order': 2,
-                            }}
-                        >
+                                </div>
+                                <div>
+                                    <Label>Prompt Type</Label>
+                                    <Dropdown
+                                            selectedKey={selectedPromptTypeItem ? selectedPromptTypeItem.key : undefined}
+                                            onChange={onPromptTypeChange}
+                                            placeholder="Prompt Type"
+                                            options={promptTypeOptions}
+                                            disabled={false}
+                                            styles={dropdownStyles}
+                                    />
+                                    <TextField
+                                        className={styles.oneshotSettingsSeparator}
+                                        value={promptTemplate}
+                                        label="Override prompt template"
+                                        multiline
+                                        autoAdjustHeight
+                                        onChange={onPromptTemplateChange}
+                                    />
+                                </div>
+                                <SpinButton
+                                    className={styles.chatSettingsSeparator}
+                                    label="Retrieve this many documents from search:"
+                                    min={1}
+                                    max={7}
+                                    defaultValue={retrieveCount.toString()}
+                                    onChange={onRetrieveCountChange}
+                                />
+                                <SpinButton
+                                    className={styles.oneshotSettingsSeparator}
+                                    label="Set the Temperature:"
+                                    min={0.0}
+                                    max={1.0}
+                                    defaultValue={temperature.toString()}
+                                    onChange={onTemperatureChange}
+                                />
+                                <SpinButton
+                                    className={styles.oneshotSettingsSeparator}
+                                    label="Max Length (Tokens):"
+                                    min={0}
+                                    max={4000}
+                                    defaultValue={tokenLength.toString()}
+                                    onChange={onTokenLengthChange}
+                                />
+                                <Dropdown 
+                                    label="Chain Type"
+                                    onChange={onChainChange}
+                                    selectedKey={selectedChain ? selectedChain.key : 'stuff'}
+                                    options={chainTypeOptions}
+                                    defaultSelectedKey={'stuff'}
+                                    styles={dropdownStyles}
+                                />
+                                <Checkbox
+                                    className={styles.chatSettingsSeparator}
+                                    checked={useSuggestFollowupQuestions}
+                                    label="Suggest follow-up questions"
+                                    onChange={onUseSuggestFollowupQuestionsChange}
+                                />
+                                <Checkbox
+                                    className={styles.chatSettingsSeparator}
+                                    checked={useAutoSpeakAnswers}
+                                    label="Automatically speak answers"
+                                    onChange={onEnableAutoSpeakAnswersChange}
+                                />
+                            </Panel>
+                        </div>
+                    </div>
+                    </PivotItem>
+                    <PivotItem
+                        headerText="Chat Gpt"
+                        headerButtonProps={{
+                        'data-order': 1,
+                        }}
+                    >
+                        <div className={styles.root}>
+                            <br/>
                             <div className={styles.commandsContainer}>
-                                <ClearChatButton className={styles.commandButton} onClick={clearChat3}  text="Clear chat" disabled={!lastQuestionRef3.current || isLoading} />
-                                <SettingsButton className={styles.commandButton} onClick={() => setIsConfigPanelOpen(!isConfigPanelOpen)} />
-                                <div className={styles.commandButton}>{selectedItem ? 
-                                    "Document Name : "  + selectedItem.text : undefined}</div>
+                                <ClearChatButton className={styles.commandButton} onClick={clearChatGpt}  text="Clear chat" disabled={!lastQuestionRefGpt.current || isLoading} />
+                                <SettingsButton className={styles.commandButton} onClick={() => setIsConfigPanelOpenGpt(!isConfigPanelOpenGpt)} />
+                                <Checkbox label="Internet Search" checked={useInternet} onChange={onUseInternetChanged} />
                             </div>
-                            <div className={styles.chatRoot}>
+                            <div className={styles.commandsContainer}>
+                                <SessionButton className={styles.commandButton} onClick={clearChatGpt} />
+                                <ClearChatButton className={styles.commandButton} onClick={deleteSessionGpt}  text="Delete Session" disabled={false} />
+                                <RenameButton className={styles.commandButton}  onClick={renameSessionGpt}  text="Rename Session"/>
+                                <TextField className={styles.commandButton} value={sessionNameGpt} onChange={onSessionNameChangeGpt}
+                                    styles={{root: {width: '200px'}}} />
+                            </div>
+                            {/* <div className={styles.chatRoot}> */}
+                            <Stack horizontal className={styles.chatRoot}>
+                                {detailsListChat}
                                 <div className={styles.chatContainer}>
-                                    {!lastQuestionRef3.current ? (
-                                        <div className={styles.chatEmptyState}>
-                                            <SparkleFilled fontSize={"30px"} primaryFill={"rgba(115, 118, 225, 1)"} aria-hidden="true" aria-label="Chat logo" />
-                                            <h3 className={styles.chatEmptyStateTitle}>Chat with your data</h3>
-                                            <div className={styles.example}>
-                                                <p className={styles.exampleText}><b>Document Summary</b> : {summary}</p>
-                                            </div>
-                                            <h4 className={styles.chatEmptyStateSubtitle}>Ask anything or try from following example</h4>
+                                    {!lastQuestionRefGpt.current ? (
+                                        <Stack className={styles.chatEmptyState}>
+                                            <h1 className={styles.chatEmptyStateTitle}>Start chatting</h1>
+                                            <h2 className={styles.chatEmptyStateSubtitle}>This chatbot is configured to answer your questions</h2>
                                             <div className={styles.chatInput}>
                                                 <QuestionInput
                                                     clearOnSend
                                                     placeholder="Type a new question"
                                                     disabled={isLoading}
-                                                    onSend={question => makeApiRequest3(question)}
+                                                    onSend={question => makeApiRequestGpt(question)}
                                                 />
                                             </div>
-                                            {exampleLoading ? <div><span>Please wait, Generating Sample Question</span><Spinner/></div> : null}
-                                            <ExampleList onExampleClicked={onExampleClicked3}
-                                            EXAMPLES={
-                                                exampleList
-                                            } />
-                                        </div>
+                                        </Stack>
                                     ) : (
-                                        <div className={styles.chatMessageStream}>
-                                            {answers3.map((answer, index) => (
+                                        <div className={styles.chatMessageStream} style={{ marginBottom: isLoading ? "40px" : "0px"}} role="log">
+                                            {answersGpt.map((answer, index) => (
                                                 <div key={index}>
                                                     <UserChatMessage message={answer[0]} />
                                                     <div className={styles.chatMessageGpt}>
-                                                        <Answer
+                                                        <AnswerChat
                                                             key={index}
                                                             answer={answer[1]}
-                                                            isSpeaking = {runningIndex === index}
-                                                            isSelected={selectedAnswer === index && activeAnalysisPanelTab !== undefined}
-                                                            onCitationClicked={c => onShowCitation(c, index)}
-                                                            onThoughtProcessClicked={() => onToggleTab(AnalysisPanelTabs.ThoughtProcessTab, index)}
-                                                            onSupportingContentClicked={() => onToggleTab(AnalysisPanelTabs.SupportingContentTab, index)}
-                                                            onSpeechSynthesisClicked={() => startOrStopSynthesis("gpt3", answer[2], index)}
-                                                            onFollowupQuestionClicked={q => makeApiRequest3(q)}
-                                                            showFollowupQuestions={useSuggestFollowupQuestions && answers3.length - 1 === index}
                                                         />
                                                     </div>
                                                 </div>
                                             ))}
                                             {isLoading && (
                                                 <>
-                                                    <UserChatMessage message={lastQuestionRef3.current} />
+                                                    <UserChatMessage message={lastQuestionRefGpt.current} />
                                                     <div className={styles.chatMessageGptMinWidth}>
                                                         <AnswerLoading />
                                                     </div>
@@ -1095,9 +1401,9 @@ const ChatGpt = () => {
                                             )}
                                             {error ? (
                                                 <>
-                                                    <UserChatMessage message={lastQuestionRef3.current} />
+                                                    <UserChatMessage message={lastQuestionRefGpt.current} />
                                                     <div className={styles.chatMessageGptMinWidth}>
-                                                        <AnswerError error={error.toString()} onRetry={() => makeApiRequest3(lastQuestionRef3.current)} />
+                                                        <AnswerError error={error.toString()} onRetry={() => makeApiRequestGpt(lastQuestionRefGpt.current)} />
                                                     </div>
                                                 </>
                                             ) : null}
@@ -1107,110 +1413,86 @@ const ChatGpt = () => {
                                                     clearOnSend
                                                     placeholder="Type a new question"
                                                     disabled={isLoading}
-                                                    onSend={question => makeApiRequest3(question)}
+                                                    onSend={question => makeApiRequestGpt(question)}
                                                 />
                                             </div>
                                         </div>
                                     )}
                                 </div>
+                                </Stack>
+                            {/* </div> */}
 
-                                {answers3.length > 0 && activeAnalysisPanelTab && (
-                                    <AnalysisPanel
-                                        className={styles.chatAnalysisPanel}
-                                        activeCitation={activeCitation}
-                                        onActiveTabChanged={x => onToggleTab(x, selectedAnswer)}
-                                        citationHeight="810px"
-                                        answer={answers3[selectedAnswer][1]}
-                                        activeTab={activeAnalysisPanelTab}
+                            <Panel
+                                headerText="Configure Chat Interaction"
+                                isOpen={isConfigPanelOpenGpt}
+                                isBlocking={false}
+                                onDismiss={() => setIsConfigPanelOpenGpt(false)}
+                                closeButtonAriaLabel="Close"
+                                onRenderFooterContent={() => <DefaultButton onClick={() => setIsConfigPanelOpenGpt(false)}>Close</DefaultButton>}
+                                isFooterAtBottom={true}
+                            >
+                                <br/>
+                                <div>
+                                    <Label>LLM Model</Label>
+                                    <Dropdown
+                                        selectedKey={selectedEmbeddingItemGpt ? selectedEmbeddingItemGpt.key : undefined}
+                                        onChange={onEmbeddingChangeGpt}
+                                        placeholder="Select an LLM Model"
+                                        options={embeddingOptions}
+                                        disabled={false}
+                                        styles={dropdownStyles}
                                     />
-                                )}
-
-                                <Panel
-                                    headerText="Configure Chat Interaction"
-                                    isOpen={isConfigPanelOpen}
-                                    isBlocking={false}
-                                    onDismiss={() => setIsConfigPanelOpen(false)}
-                                    closeButtonAriaLabel="Close"
-                                    onRenderFooterContent={() => <DefaultButton onClick={() => setIsConfigPanelOpen(false)}>Close</DefaultButton>}
-                                    isFooterAtBottom={true}
-                                >
-                                    <br/>
-                                    <div>
-                                        <DefaultButton onClick={refreshBlob}>Refresh Docs</DefaultButton>
-                                        <Dropdown
-                                            selectedKey={selectedItem ? selectedItem.key : undefined}
-                                            // eslint-disable-next-line react/jsx-no-bind
-                                            onChange={onChange}
-                                            placeholder="Select an PDF"
-                                            options={options}
+                                </div>
+                                <div>
+                                    <Label>Deployment Type</Label>
+                                    <Dropdown
+                                            selectedKey={selectedDeploymentTypeGpt ? selectedDeploymentTypeGpt.key : undefined}
+                                            onChange={onDeploymentTypeChangeGpt}
+                                            placeholder="Select an Deployment Type"
+                                            options={deploymentTypeOptions}
+                                            disabled={((selectedEmbeddingItemGpt?.key == "openai" ? true : false) || (Number(selectedChunkSize) > 4000 ? true : false))}
                                             styles={dropdownStyles}
-                                        />
-                                        &nbsp;
-                                        <Label className={styles.commandsContainer}>Index Type : {selectedIndex}</Label>
-                                    </div>
-                                    <br/>
-                                    <div>
-                                        <Label>LLM Model</Label>
-                                        <Dropdown
-                                            selectedKey={selectedEmbeddingItem ? selectedEmbeddingItem.key : undefined}
-                                            onChange={onEmbeddingChange}
-                                            defaultSelectedKey="azureopenai"
-                                            placeholder="Select an LLM Model"
-                                            options={embeddingOptions}
+                                    />
+                                </div>
+                                <div>
+                                    <Label>Prompt Type</Label>
+                                    <Dropdown
+                                            selectedKey={selectedPromptTypeItemGpt ? selectedPromptTypeItemGpt.key : undefined}
+                                            onChange={onPromptTypeChangeGpt}
+                                            placeholder="Prompt Type"
+                                            options={promptTypeGptOptions}
                                             disabled={false}
                                             styles={dropdownStyles}
-                                        />
-                                    </div>
+                                    />
                                     <TextField
-                                        className={styles.chatSettingsSeparator}
-                                        defaultValue={promptTemplate}
+                                        className={styles.oneshotSettingsSeparator}
+                                        value={promptTemplateGpt}
                                         label="Override prompt template"
                                         multiline
                                         autoAdjustHeight
-                                        onChange={onPromptTemplateChange}
+                                        onChange={onPromptTemplateChangeGpt}
                                     />
-
-                                    <SpinButton
-                                        className={styles.chatSettingsSeparator}
-                                        label="Retrieve this many documents from search:"
-                                        min={1}
-                                        max={7}
-                                        defaultValue={retrieveCount.toString()}
-                                        onChange={onRetrieveCountChange}
-                                    />
-                                    <SpinButton
-                                        className={styles.oneshotSettingsSeparator}
-                                        label="Set the Temperature:"
-                                        min={0.0}
-                                        max={1.0}
-                                        defaultValue={temperature.toString()}
-                                        onChange={onTemperatureChange}
-                                    />
-                                    <SpinButton
-                                        className={styles.oneshotSettingsSeparator}
-                                        label="Max Length (Tokens):"
-                                        min={0}
-                                        max={4000}
-                                        defaultValue={tokenLength.toString()}
-                                        onChange={onTokenLengthChange}
-                                    />
-                                    <Checkbox
-                                        className={styles.chatSettingsSeparator}
-                                        checked={useSuggestFollowupQuestions}
-                                        label="Suggest follow-up questions"
-                                        onChange={onUseSuggestFollowupQuestionsChange}
-                                    />
-                                    <Checkbox
-                                        className={styles.chatSettingsSeparator}
-                                        checked={useAutoSpeakAnswers}
-                                        label="Automatically speak answers"
-                                        onChange={onEnableAutoSpeakAnswersChange}
-                                    />
-                                </Panel>
-                            </div>
-                        </PivotItem> */}
+                                </div>
+                                <SpinButton
+                                    className={styles.oneshotSettingsSeparator}
+                                    label="Set the Temperature:"
+                                    min={0.0}
+                                    max={1.0}
+                                    defaultValue={temperatureGpt.toString()}
+                                    onChange={onTemperatureChangeGpt}
+                                />
+                                <SpinButton
+                                    className={styles.oneshotSettingsSeparator}
+                                    label="Max Length (Tokens):"
+                                    min={0}
+                                    max={4000}
+                                    defaultValue={tokenLengthGpt.toString()}
+                                    onChange={onTokenLengthChangeGpt}
+                                />
+                            </Panel>
+                        </div>
+                    </PivotItem>
                 </Pivot>
-                </div>
             )}
         </div>
     );

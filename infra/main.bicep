@@ -30,8 +30,6 @@ param applicationInsightsName string = '${prefix}appisg'
 
 param openAiSkuName string = 'S0'
 
-param gptDeploymentName string = 'davinci'
-param gptModelName string = 'text-davinci-003'
 param chatGptDeploymentName string = 'chat'
 param chatGptModelName string = 'gpt-35-turbo'
 param textEmbeddingDeploymentName string = 'text-embedding-ada-002'
@@ -130,17 +128,6 @@ module openAi 'core/ai/cognitiveservices.bicep' = {
     }
     deployments: [
       {
-        name: gptDeploymentName
-        model: {
-          format: 'OpenAI'
-          name: gptModelName
-          version: '1'
-        }
-        scaleSettings: {
-          scaleType: 'Standard'
-        }
-      }
-      {
         name: chatGptDeploymentName
         model: {
           format: 'OpenAI'
@@ -210,8 +197,7 @@ module function 'core/host/function.bicep' = {
       APPLICATIONINSIGHTS_CONNECTION_STRING: monitoring.outputs.connectionString
       OpenAiService:openAi.outputs.name
       OpenAiEndPoint:openAi.outputs.endpoint
-      OpenAiVersion:'2022-12-01'
-      OpenAiDavinci:gptDeploymentName
+      OpenAiVersion:'2023-05-15'
       OpenAiEmbedding:textEmbeddingDeploymentName
       OpenAiKey:openAi.outputs.key
       MaxTokens:500
@@ -287,9 +273,7 @@ module backend 'core/host/appservice.bicep' = {
       AGENTQA_URL: '${function.outputs.uri}/AgentQa?code=${function.outputs.key}'
       QA_URL: '${function.outputs.uri}/QuestionAnswering?code=${function.outputs.key}'
       CHAT_URL: '${function.outputs.uri}/ChatGpt?code=${function.outputs.key}'
-      CHAT3_URL: '${function.outputs.uri}/Chat?code=${function.outputs.key}'
       DOCGENERATOR_URL: '${function.outputs.uri}/DocGenerator?code=${function.outputs.key}'
-      SUMMARYQA_URL: '${function.outputs.uri}/SampleQaSummary?code=${function.outputs.key}'
       SECSEARCH_URL: '${function.outputs.uri}/SecSearch?code=${function.outputs.key}'
       SQLCHAT_URL: '${function.outputs.uri}/SqlChat?code=${function.outputs.key}'
       SQLCHAIN_URL: '${function.outputs.uri}/SqlChain?code=${function.outputs.key}'
@@ -305,7 +289,6 @@ output AZURE_TENANT_ID string = tenant().tenantId
 output AZURE_RESOURCE_GROUP string = resourceGroup.name
 
 output AZURE_OPENAI_SERVICE string = openAi.outputs.name
-output AZURE_OPENAI_GPT_DEPLOYMENT string = gptDeploymentName
 output AZURE_OPENAI_CHATGPT_DEPLOYMENT string = chatGptDeploymentName
 
 output AZURE_SEARCH_SERVICE string = searchService.outputs.name

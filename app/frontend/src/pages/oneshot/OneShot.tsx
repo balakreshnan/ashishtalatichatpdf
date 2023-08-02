@@ -7,7 +7,7 @@ import styles from "./OneShot.module.css";
 import { Dropdown, DropdownMenuItemType, IDropdownStyles, IDropdownOption } from '@fluentui/react/lib/Dropdown';
 
 import { askApi, askAgentApi, askTaskAgentApi, Approaches, AskResponse, AskRequest, refreshIndex, getSpeechApi, 
-    summaryAndQa, refreshQuestions, getUserInfo } from "../../api";
+    refreshQuestions, getUserInfo } from "../../api";
 import { Answer, AnswerError } from "../../components/Answer";
 import { QuestionInput } from "../../components/QuestionInput";
 import { AnalysisPanel, AnalysisPanelTabs } from "../../components/AnalysisPanel";
@@ -40,7 +40,6 @@ const OneShot = () => {
     const [useSemanticCaptions, setUseSemanticCaptions] = useState<boolean>(false);
     const [useSuggestFollowupQuestions, setUseSuggestFollowupQuestions] = useState<boolean>(true);
     const [useAutoSpeakAnswers, setUseAutoSpeakAnswers] = useState<boolean>(false);
-
 
     const [options, setOptions] = useState<any>([])
     const [selectedItem, setSelectedItem] = useState<IDropdownOption>();
@@ -149,6 +148,14 @@ const OneShot = () => {
         {
           key: 'financial',
           text: 'financial'
+        },
+        {
+            key: 'financialtable',
+            text: 'financialtable'
+        },
+        {
+            key: 'prospectus',
+            text: 'prospectus'
         },
         {
           key: 'insurance',
@@ -372,6 +379,7 @@ const OneShot = () => {
                 }
             };
             const result = await askAgentApi(request);
+            console.log(result);
             //setAgentAnswer(result);
             setAgentAnswer([result, null]);
             if(useAutoSpeakAnswers) {
@@ -591,8 +599,8 @@ const OneShot = () => {
                 for (const item of questionList) {
                     if ((item != '')) {
                         sampleQuestion.push({
-                            text: item.replace(/[0-9]./g, ''),
-                            value: item.replace(/[0-9]./g, ''),
+                            text: item.replace(/^\d+\.\s*/, '').replace('<', '').replace('>', ''),
+                            value: item.replace(/^\d+\.\s*/, '').replace('<', '').replace('>', ''),
                         })
                     } 
                 }
@@ -647,11 +655,59 @@ const OneShot = () => {
         {summaries}
         Question: {question}
         `
+
+        const financialPrompt = `You are an AI assistant tasked with answering questions and summarizing information from 
+        earning call transcripts, annual reports, SEC filings and financial statements.
+        Your answer should accurately capture the key information in the document while avoiding the omission of any domain-specific words. 
+        Please generate a concise and comprehensive information that includes details such as reporting year and amount in millions.
+        Ensure that it is easy to understand for business professionals and provides an accurate representation of the financial statement history. 
+        
+        Please remember to use clear language and maintain the integrity of the original information without missing any important details
+
+        QUESTION: {question}
+        =========
+        {summaries}
+        =========
+        `
+
+        const financialTablePrompt = `You are an AI assistant tasked with answering questions and summarizing information from 
+        financial statements like income statement, cashflow and balance sheets. 
+        Additionally you may also be asked to answer questions about financial ratios and other financial metrics.
+        The data that you are presented will be in table format or structure.
+        Your answer should accurately capture the key information in the document while avoiding the omission of any domain-specific words. 
+        Please generate a concise and comprehensive information that includes details such as reporting year and amount in millions.
+        Ensure that it is easy to understand for business professionals and provides an accurate representation of the financial statement history. 
+        
+        Please remember to use clear language and maintain the integrity of the original information without missing any important details
+
+        QUESTION: {question}
+        =========
+        {summaries}
+        =========
+        `
+
+        const prospectusPrompt = `"""You are an AI assistant tasked with summarizing documents from large documents that contains information about Initial Public Offerings. 
+        IPO document contains sections with information about the company, its business, strategies, risk, management structure, financial, and other information.
+        Your summary should accurately capture the key information in the document while avoiding the omission of any domain-specific words. 
+        Please remember to use clear language and maintain the integrity of the original information without missing any important details:
+        QUESTION: {question}
+        =========
+        {summaries}
+        =========
+
+        """`
+
         if (promptType == "generic") {
             setPromptTemplate(genericPrompt)
         }
         else if (promptType == "medical") {
             setPromptTemplate(medicalPrompt)
+        } else if (promptType == "financial") {
+            setPromptTemplate(financialPrompt)
+        } else if (promptType == "financialtable") {
+            setPromptTemplate(financialTablePrompt)
+        } else if (promptType == "prospectus") {
+            setPromptTemplate(prospectusPrompt)
         } else if (promptType == "custom") {
             setPromptTemplate("")
         }
@@ -681,8 +737,8 @@ const OneShot = () => {
                 for (const item of questionList) {
                     if ((item != '')) {
                         sampleQuestion.push({
-                            text: item.replace(/[0-9]./g, ''),
-                            value: item.replace(/[0-9]./g, ''),
+                            text: item.replace(/^\d+\.\s*/, '').replace('<', '').replace('>', ''),  //item.replace(/[0-9]./g, ''),
+                            value: item.replace(/^\d+\.\s*/, '').replace('<', '').replace('>', '') //item.replace(/[0-9]./g, ''),
                         })
                     } 
                 }

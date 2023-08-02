@@ -22,9 +22,9 @@ from langchain.callbacks import get_openai_callback
 from langchain.chains.question_answering import load_qa_chain
 from langchain.output_parsers import RegexParser
 from langchain.chains import RetrievalQA
+from Utilities.pibCopilot import performLatestPibDataSearch
 from typing import Any, Sequence
 from Utilities.modelHelper import numTokenFromMessages, getTokenLimit
-from Utilities.messageBuilder import MessageBuilder
 
 def main(req: func.HttpRequest, context: func.Context) -> func.HttpResponse:
     logging.info(f'{context.function_name} HTTP trigger function processed a request.')
@@ -37,8 +37,8 @@ def main(req: func.HttpRequest, context: func.Context) -> func.HttpResponse:
                 f"function {context.function_name} has been reached")
 
     try:
-        indexNs = req.params.get('indexNs')
-        indexType = req.params.get('indexType')
+        symbol = req.params.get('symbol')
+        indexName = req.params.get('indexName')
         body = json.dumps(req.get_json())
     except ValueError:
         return func.HttpResponse(
@@ -47,12 +47,7 @@ def main(req: func.HttpRequest, context: func.Context) -> func.HttpResponse:
         )
 
     if body:
-        if len(PineconeKey) > 10 and len(PineconeEnv) > 10:
-            pinecone.init(
-                api_key=PineconeKey,  # find at app.pinecone.io
-                environment=PineconeEnv  # next to api key in console
-            )
-        result = ComposeResponse(body, indexNs, indexType)
+        result = ComposeResponse(body, symbol, indexName)
         return func.HttpResponse(result, mimetype="application/json")
     else:
         return func.HttpResponse(
@@ -60,7 +55,7 @@ def main(req: func.HttpRequest, context: func.Context) -> func.HttpResponse:
              status_code=400
         )
 
-def ComposeResponse(jsonData, indexNs, indexType):
+def ComposeResponse(jsonData, symbol, indexName):
     values = json.loads(jsonData)['values']
 
     logging.info("Calling Compose Response")
@@ -69,7 +64,7 @@ def ComposeResponse(jsonData, indexNs, indexType):
     results["values"] = []
 
     for value in values:
-        outputRecord = TransformValue(value, indexNs, indexType)
+        outputRecord = TransformValue(value, symbol, indexName)
         if outputRecord != None:
             results["values"].append(outputRecord)
     return json.dumps(results, ensure_ascii=False)
@@ -97,34 +92,8 @@ def getMessagesFromHistory(systemPrompt: str, modelId: str, history: Sequence[di
             tokenLength += numTokenFromMessages(messages[appendIndex], modelId)
             if tokenLength > maxTokens:
                 break
-
-        # messageBuilder = MessageBuilder(systemPrompt, modelId)
-
-        # for shot in fewShots:
-        #     messageBuilder.append_message(shot.get('role'), shot.get('content'))
-
-        # userContent = userConv
-        # appendIndex = len(fewShots) + 1
-
-        # messageBuilder.append_message("user", userContent, index=appendIndex)
-
-        # for h in reversed(history[:-1]):
-        #     if h.get("bot"):
-        #         messageBuilder.append_message("assistant", h.get('bot'), index=appendIndex)
-        #     messageBuilder.append_message("user", h.get('user'), index=appendIndex)
-        #     if messageBuilder.token_length > maxTokens:
-        #         break
-        # messages = messageBuilder.messages
-
+        
         return messages
-
-def getChatHistory(history, includeLastTurn=True, maxTokens=1000) -> str:
-    historyText = ""
-    for h in reversed(history if includeLastTurn else history[:-1]):
-        historyText = """<|im_start|>user""" +"\n" + h["user"] + "\n" + """<|im_end|>""" + "\n" + """<|im_start|>assistant""" + "\n" + (h.get("bot") + """<|im_end|>""" if h.get("bot") else "") + "\n" + historyText
-        if len(historyText) > maxTokens*4:
-            break
-    return historyText
 
 def insertMessage(sessionId, type, role, totalTokens, tokens, response, cosmosContainer):
     aiMessage = {
@@ -138,7 +107,7 @@ def insertMessage(sessionId, type, role, totalTokens, tokens, response, cosmosCo
     }
     cosmosContainer.create_item(body=aiMessage)
 
-def GetRrrAnswer(history, approach, overrides, indexNs, indexType):
+def GetRrrAnswer(history, approach, overrides, symbol, indexName):
     embeddingModelType = overrides.get('embeddingModelType') or 'azureopenai'
     topK = overrides.get("top") or 5
     temperature = overrides.get("temperature") or 0.3
@@ -171,7 +140,6 @@ def GetRrrAnswer(history, approach, overrides, indexNs, indexType):
     except Exception as e:
         logging.info("Error inserting session into CosmosDB: " + str(e))
 
-
     systemTemplate = """Below is a history of the conversation so far, and a new question asked by the user that needs to be answered by searching in a knowledge base.
     Generate a search query based on the conversation and the new question.
     The search query should be optimized to find the answer to the question in the knowledge base.
@@ -201,7 +169,7 @@ def GetRrrAnswer(history, approach, overrides, indexNs, indexType):
             [],
             tokenLimit - len('Generate search query for: ' + lastQuestion)
             )
-    
+
     if (embeddingModelType == 'azureopenai'):
         baseUrl = f"https://{OpenAiService}.openai.azure.com"
         openai.api_type = "azure"
@@ -269,18 +237,17 @@ def GetRrrAnswer(history, approach, overrides, indexNs, indexType):
             q = completion.choices[0].message.content
         else:
             q = lastQuestion
-            
         logging.info("Question " + str(q))
         if q.strip() == "0":
-            q = lastQuestion
+            q = history[-1]["user"]
 
         if (q == ''):
-            q = lastQuestion
+            q = history[-1]["user"]
 
         insertMessage(sessionId, "Message", "User", 0, 0, lastQuestion, cosmosContainer)
 
     except Exception as e:
-        q = lastQuestion
+        q = history[-1]["user"]
         logging.info(e)
 
     try:
@@ -288,7 +255,9 @@ def GetRrrAnswer(history, approach, overrides, indexNs, indexType):
         if (overrideChain == "stuff"):
             if promptTemplate == '':
                 template = """
-                    Given the following extracted parts of a long document and a question, create a final answer. 
+                    You are an AI assistant tasked with answering questions from financial information documents like earning call transcripts and SEC filings. 
+                    Your answer should accurately capture the key information in the context below while avoiding the omission of any domain-specific words. 
+                    Please generate a concise and comprehensive answer 
                     If you don't know the answer, just say that you don't know. Don't try to make up an answer. 
                     If the answer is not contained within the text below, say \"I don't know\".
 
@@ -472,195 +441,75 @@ def GetRrrAnswer(history, approach, overrides, indexNs, indexType):
             followupPrompt = PromptTemplate(template=followupTemplate, input_variables=["context"])
             followupChain = load_qa_chain(llmChat, chain_type='stuff', prompt=followupPrompt)
 
-        # STEP 2: Retrieve relevant documents from the search index with the GPT optimized query    
-        # combinePromptTemplate = """Given the following extracted parts of a long document and a question, create a final answer with references ("SOURCES").
-        #     If you don't know the answer, just say that you don't know. Don't try to make up an answer.
-        #     ALWAYS return a "SOURCES" section as part in your answer.
-
-        #     QUESTION: {question}
-        #     =========
-        #     {summaries}
-        #     =========
-
-        #     After finding the answer, generate three very brief next questions that the user would likely ask next.
-        #     Use angle brackets to reference the next questions, e.g. <Is there a more details on that?>.
-        #     Try not to repeat questions that have already been asked.
-        #     next questions should come after 'SOURCES' section
-        #     ALWAYS return a "NEXT QUESTIONS" part in your answer.
-        #     """
-        
-        # combinePrompt = PromptTemplate(
-        #     template=combinePromptTemplate, input_variables=["summaries", "question"]
-        # )
-
         logging.info("Final Prompt created")
-        if indexType == 'pinecone':
-            vectorDb = Pinecone.from_existing_index(index_name=VsIndexName, embedding=embeddings, namespace=indexNs)
-            docRetriever = vectorDb.as_retriever(search_kwargs={"namespace": indexNs, "k": topK})
-            logging.info("Pinecone Setup done for indexName : " + indexNs)
-            with get_openai_callback() as cb:
-                chain = RetrievalQAWithSourcesChain(combine_documents_chain=qaChain, retriever=docRetriever, 
-                                                return_source_documents=True)
-                historyText = getChatHistory(history, includeLastTurn=False)
-                # historyTextList = getMessagesFromHistory(systemTemplate,
-                #                 gptModel,
-                #                 history,
-                #                 lastQuestion,
-                #                 [],
-                #                 tokenLimit - len(lastQuestion))
-                # historyText = ' '.join(historyTextList)
-                answer = chain({"question": q, "summaries": historyText}, return_only_outputs=True)
-                docs = answer['source_documents']
-                rawDocs = []
-                for doc in docs:
-                    rawDocs.append(doc.page_content)
-                if overrideChain == "stuff" or overrideChain == "map_rerank" or overrideChain == "map_reduce":
-                    thoughtPrompt = qaPrompt.format(question=q, summaries=rawDocs)
-                elif overrideChain == "refine":
-                    thoughtPrompt = qaPrompt.format(question=q, context_str=rawDocs)
 
-                fullAnswer = answer['answer'].replace('ANSWER:', '').replace("Source:", 'SOURCES:').replace("Sources:", 'SOURCES:').replace("NEXT QUESTIONS:", 'Next Questions:')
-                modifiedAnswer = fullAnswer
-
-                # Followup questions
-                followupChain = RetrievalQA(combine_documents_chain=followupChain, retriever=docRetriever)
-                followupAnswer = followupChain({"query": q}, return_only_outputs=True)
-                nextQuestions = followupAnswer['result'].replace("Answer: ", '').replace("Sources:", 'SOURCES:').replace("Next Questions:", 'NEXT QUESTIONS:').replace('NEXT QUESTIONS:', '').replace('NEXT QUESTIONS', '')
-                sources = ''                
-                if (modifiedAnswer.find("I don't know") >= 0):
-                    sources = ''
-                    nextQuestions = ''
-                else:
-                    sources = sources + "\n" + docs[0].metadata['source']
-
-
-                response = {"data_points": rawDocs, "answer": modifiedAnswer.replace("Answer: ", ''), 
-                        "thoughts": f"<br><br>Prompt:<br>" + thoughtPrompt.replace('\n', '<br>'), 
-                        "sources": sources.replace("SOURCES:", '').replace("SOURCES", "").replace("Sources:", '').replace('- ', ''), 
-                        "nextQuestions": nextQuestions.replace('Next Questions:', '').replace('- ', ''), "error": ""}
-                try:
-                    insertMessage(sessionId, "Message", "Assistant", totalTokens, cb.total_tokens, response, cosmosContainer)
-                except Exception as e:
-                    logging.info("Error inserting message: " + str(e))
-
-                return response
-        elif indexType == "redis":
-            try:
-                returnField = ["metadata", "content", "vector_score"]
-                vectorField = "content_vector"
-                results = performRedisSearch(q, indexNs, topK, returnField, vectorField, embeddingModelType)
-                docs = [
-                        Document(page_content=result.content, metadata=json.loads(result.metadata))
-                        for result in results.docs
-                ]
-                rawDocs = []
-                for doc in docs:
-                    rawDocs.append(doc.page_content)
-
-                if overrideChain == "stuff" or overrideChain == "map_rerank" or overrideChain == "map_reduce":
-                    thoughtPrompt = qaPrompt.format(question=q, summaries=rawDocs)
-                elif overrideChain == "refine":
-                    thoughtPrompt = qaPrompt.format(question=q, context_str=rawDocs)
-
-                with get_openai_callback() as cb:
-                    answer = qaChain({"input_documents": docs, "question": q}, return_only_outputs=True)
-                    fullAnswer = answer['output_text'].replace('ANSWER:', '').replace("Source:", 'SOURCES:').replace("Sources:", 'SOURCES:').replace("NEXT QUESTIONS:", 'Next Questions:')
-                    modifiedAnswer = fullAnswer
-
-                    # Followup questions
-                    followupAnswer = followupChain({"input_documents": docs, "question": q}, return_only_outputs=True)
-                    nextQuestions = followupAnswer['output_text'].replace("Answer: ", '').replace("Sources:", 'SOURCES:').replace("Next Questions:", 'NEXT QUESTIONS:').replace('NEXT QUESTIONS:', '').replace('NEXT QUESTIONS', '')
-                    sources = ''                
-                    if (modifiedAnswer.find("I don't know") >= 0):
-                        sources = ''
-                        nextQuestions = ''
-                    else:
-                        sources = sources + "\n" + docs[0].metadata['source']
-
-                    response = {"data_points": rawDocs, "answer": modifiedAnswer.replace("Answer: ", ''), 
-                        "thoughts": f"<br><br>Prompt:<br>" + thoughtPrompt.replace('\n', '<br>'), 
-                        "sources": sources.replace("SOURCES:", '').replace("SOURCES", "").replace("Sources:", '').replace('- ', ''), 
-                        "nextQuestions": nextQuestions.replace('Next Questions:', '').replace('- ', ''), "error": ""}
-                    try:
-                        insertMessage(sessionId, "Message", "Assistant", totalTokens, cb.total_tokens, response, cosmosContainer)
-                    except Exception as e:
-                        logging.info("Error inserting message: " + str(e))
-
-                    return response
-            except Exception as e:
-                return {"data_points": "", "answer": "Working on fixing Redis Implementation - Error : " + str(e), "thoughts": "",
-                        "sources": '', "nextQuestions": '', "error": str(e)}
-        elif indexType == "cogsearch" or indexType == "cogsearchvs":
-            r = performCogSearch(indexType, embeddingModelType, q, indexNs, topK)
+        if indexName == "latestsecfilings":
+            filterData = "symbol eq '" + symbol + "' and filingType eq '" + "10-K" + "'"
+            r = performLatestPibDataSearch(OpenAiService, OpenAiKey, OpenAiVersion, OpenAiApiKey, SearchService, SearchKey, embeddingModelType, 
+                               OpenAiEmbedding, filterData, q, indexName, topK, returnFields=['id', 'content', 'latestFilingDate'])
+            
             if r == None:
-                    docs = [Document(page_content="No results found")]
+                docs = [Document(page_content="No results found")]
             else :
                 docs = [
-                    Document(page_content=doc['content'], metadata={"id": doc['id'], "source": doc['sourcefile']})
+                    Document(page_content=doc['content'], metadata={"id": doc['id'], "source": doc['latestFilingDate']})
                     for doc in r
                     ]
-            
-            rawDocs = []
-            for doc in docs:
-                rawDocs.append(doc.page_content)
+        elif indexName == "latestearningcalls":
+            filterData = "symbol eq '" + symbol + "'"
+            r = performLatestPibDataSearch(OpenAiService, OpenAiKey, OpenAiVersion, OpenAiApiKey, SearchService, SearchKey, embeddingModelType, 
+                               OpenAiEmbedding, filterData, q, indexName, topK, returnFields=['id', 'content', 'callDate'])
+            if r == None:
+                docs = [Document(page_content="No results found")]
+            else :
+                docs = [
+                    Document(page_content=doc['content'], metadata={"id": doc['id'], "source":doc['callDate']})
+                    for doc in r
+                    ]
+       
+        rawDocs = []
+        for doc in docs:
+            rawDocs.append(doc.page_content)
 
-            if overrideChain == "stuff" or overrideChain == "map_rerank" or overrideChain == "map_reduce":
-                thoughtPrompt = qaPrompt.format(question=q, summaries=rawDocs)
-            elif overrideChain == "refine":
-                thoughtPrompt = qaPrompt.format(question=q, context_str=rawDocs)
-            
-            with get_openai_callback() as cb:
-                answer = qaChain({"input_documents": docs, "question": q}, return_only_outputs=True)
-                fullAnswer = answer['output_text'].replace('ANSWER:', '').replace("Source:", 'SOURCES:').replace("Sources:", 'SOURCES:').replace("NEXT QUESTIONS:", 'Next Questions:')
-                modifiedAnswer = fullAnswer
+        if overrideChain == "stuff" or overrideChain == "map_rerank" or overrideChain == "map_reduce":
+            thoughtPrompt = qaPrompt.format(question=q, summaries=rawDocs)
+        elif overrideChain == "refine":
+            thoughtPrompt = qaPrompt.format(question=q, context_str=rawDocs)
+        
+        with get_openai_callback() as cb:
+            answer = qaChain({"input_documents": docs, "question": lastQuestion}, return_only_outputs=True)
+            fullAnswer = answer['output_text'].replace('ANSWER:', '').replace("Source:", 'SOURCES:').replace("Sources:", 'SOURCES:').replace("NEXT QUESTIONS:", 'Next Questions:')
+            modifiedAnswer = fullAnswer
 
-                # Followup questions
-                followupAnswer = followupChain({"input_documents": docs, "question": q}, return_only_outputs=True)
-                nextQuestions = followupAnswer['output_text'].replace("Answer: ", '').replace("Sources:", 'SOURCES:').replace("Next Questions:", 'NEXT QUESTIONS:').replace('NEXT QUESTIONS:', '').replace('NEXT QUESTIONS', '')
-                sources = ''                
-                if (modifiedAnswer.find("I don't know") >= 0):
-                    sources = ''
-                    nextQuestions = ''
-                else:
-                    sources = sources + "\n" + docs[0].metadata['source']
+            # Followup questions
+            followupAnswer = followupChain({"input_documents": docs, "question": q}, return_only_outputs=True)
+            nextQuestions = followupAnswer['output_text'].replace("Answer: ", '').replace("Sources:", 'SOURCES:').replace("Next Questions:", 'NEXT QUESTIONS:').replace('NEXT QUESTIONS:', '').replace('NEXT QUESTIONS', '')
+            sources = ''                
+            if (modifiedAnswer.find("I don't know") >= 0):
+                sources = ''
+                nextQuestions = ''
+            else:
+                sources = sources + "\n" + docs[0].metadata['source']
 
-                response = {"data_points": rawDocs, "answer": modifiedAnswer.replace("Answer: ", ''), 
-                    "thoughts": f"<br><br>Prompt:<br>" + thoughtPrompt.replace('\n', '<br>'), 
-                    "sources": sources.replace("SOURCES:", '').replace("SOURCES", "").replace("Sources:", '').replace('- ', ''), 
-                    "nextQuestions": nextQuestions.replace('Next Questions:', '').replace('- ', ''), "error": ""}
-                try:
-                    insertMessage(sessionId, "Message", "Assistant", totalTokens, cb.total_tokens, response, cosmosContainer)
-                except Exception as e:
-                    logging.info("Error inserting message: " + str(e))
+            response = {"data_points": rawDocs, "answer": modifiedAnswer.replace("Answer: ", ''), 
+                "thoughts": f"<br><br>Prompt:<br>" + thoughtPrompt.replace('\n', '<br>'), 
+                "sources": sources.replace("SOURCES:", '').replace("SOURCES", "").replace("Sources:", '').replace('- ', ''), 
+                "nextQuestions": nextQuestions.replace('Next Questions:', '').replace('- ', '').replace('<', '').replace('>', ''), "error": ""}
+            try:
+                insertMessage(sessionId, "Message", "Assistant", totalTokens, cb.total_tokens, response, cosmosContainer)
+            except Exception as e:
+                logging.info("Error inserting message: " + str(e))
 
-                return response
-        elif indexType == "csv":
-                downloadPath = getLocalBlob(OpenAiDocConnStr, OpenAiDocContainer, '', indexNs)
-                agent = create_csv_agent(llmChat, downloadPath, verbose=True)
-                with get_openai_callback() as cb:
-                    answer = agent.run(q)
-                    sources = getFullPath(OpenAiDocConnStr, OpenAiDocContainer, os.path.basename(downloadPath))
-                    response = {"data_points": '', "answer": answer, 
-                                "thoughts": '',
-                                    "sources": sources, "nextQuestions": '', "error": ""}
-                    try:
-                        insertMessage(sessionId, "Message", "Assistant", totalTokens, cb.total_tokens, response, cosmosContainer)
-                    except Exception as e:
-                        logging.info("Error inserting message: " + str(e))
-                        
-                    return response
-        elif indexType == 'milvus':
-            answer = "{'answer': 'TBD', 'sources': ''}"
-            return answer
+            return response
     except Exception as e:
         return {"data_points": "", "answer": "Error : " + str(e), "thoughts": "",
                 "sources": '', "nextQuestions": '', "error": str(e)}
 
-def GetAnswer(history, approach, overrides, indexNs, indexType):
+def GetAnswer(history, approach, overrides, symbol, indexName):
     logging.info("Getting ChatGpt Answer")
     try:
       if (approach == 'rrr'):
-        r = GetRrrAnswer(history, approach, overrides, indexNs, indexType)
+        r = GetRrrAnswer(history, approach, overrides, symbol, indexName)
       else:
           return json.dumps({"error": "unknown approach"})
       return r
@@ -671,7 +520,7 @@ def GetAnswer(history, approach, overrides, indexNs, indexType):
             status_code=500
       )
 
-def TransformValue(record, indexNs, indexType):
+def TransformValue(record, symbol, indexName):
     logging.info("Calling Transform Value")
     try:
         recordId = record['recordId']
@@ -709,7 +558,7 @@ def TransformValue(record, indexNs, indexType):
         approach = data['approach']
         overrides = data['overrides']
 
-        summaryResponse = GetAnswer(history, approach, overrides, indexNs, indexType)
+        summaryResponse = GetAnswer(history, approach, overrides, symbol, indexName)
         return ({
             "recordId": recordId,
             "data": summaryResponse

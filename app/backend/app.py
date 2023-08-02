@@ -19,6 +19,8 @@ import azure.cognitiveservices.speech as speechsdk
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 from azure.cosmos import CosmosClient, PartitionKey
+from Utilities.fmp import *
+from distutils.util import strtobool
 
 load_dotenv()
 app = Flask(__name__)
@@ -55,6 +57,58 @@ def ask():
         logging.exception("Exception in /ask")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/getNews", methods=["POST"])
+def getNews():
+    symbol=request.json["symbol"]
+    logging.info(f"symbol: {symbol}")
+    try:
+        FmpKey = os.environ.get("FMPKEY")
+
+        newsResp = stockNews(apikey=FmpKey, tickers=[symbol], limit=10)
+        return jsonify(newsResp)
+    except Exception as e:
+        logging.exception("Exception in /getNews")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/getSocialSentiment", methods=["POST"])
+def getSocialSentiment():
+    symbol=request.json["symbol"]
+    logging.info(f"symbol: {symbol}")
+    try:
+        FmpKey = os.environ.get("FMPKEY")
+
+        sSentiment = socialSentiments(apikey=FmpKey, symbol=symbol)
+        return jsonify(sSentiment)
+    except Exception as e:
+        logging.exception("Exception in /getSocialSentiment")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/getIncomeStatement", methods=["POST"])
+def getIncomeStatement():
+    symbol=request.json["symbol"]
+    logging.info(f"symbol: {symbol}")
+    try:
+        FmpKey = os.environ.get("FMPKEY")
+
+        sSentiment = incomeStatement(apikey=FmpKey, symbol=symbol, limit=5)
+        return jsonify(sSentiment)
+    except Exception as e:
+        logging.exception("Exception in /getIncomeStatement")
+        return jsonify({"error": str(e)}), 500
+    
+@app.route("/getCashFlow", methods=["POST"])
+def getCashFlow():
+    symbol=request.json["symbol"]
+    logging.info(f"symbol: {symbol}")
+    try:
+        FmpKey = os.environ.get("FMPKEY")
+
+        sSentiment = cashFlowStatement(apikey=FmpKey, symbol=symbol, limit=5)
+        return jsonify(sSentiment)
+    except Exception as e:
+        logging.exception("Exception in /getCashFlow")
+        return jsonify({"error": str(e)}), 500
+    
 @app.route("/getPib", methods=["POST"])
 def getPib():
     step=request.json["step"]
@@ -149,6 +203,51 @@ def chat():
         logging.exception("Exception in /chat")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/chatGpt", methods=["POST"])
+def chatGpt():
+    indexType=request.json["indexType"]
+    indexNs=request.json["indexNs"]
+    postBody=request.json["postBody"]
+ 
+    logging.info(f"indexType: {indexType}")
+    logging.info(f"indexNs: {indexNs}")
+    
+    try:
+        headers = {'content-type': 'application/json'}
+        url = os.environ.get("CHATGPT_URL")
+
+        data = postBody
+        params = {'indexType': indexType, "indexNs": indexNs }
+        resp = requests.post(url, params=params, data=json.dumps(data), headers=headers)
+        jsonDict = json.loads(resp.text)
+        #return json.dumps(jsonDict)
+        return jsonify(jsonDict)
+    except Exception as e:
+        logging.exception("Exception in /chatGpt")
+        return jsonify({"error": str(e)}), 500
+    
+@app.route("/pibChat", methods=["POST"])
+def pibChat():
+    symbol=request.json["symbol"]
+    indexName=request.json["indexName"]
+    postBody=request.json["postBody"]
+ 
+    logging.info(f"symbol: {symbol}")
+    
+    try:
+        headers = {'content-type': 'application/json'}
+        url = os.environ.get("PIBCHAT_URL")
+
+        data = postBody
+        params = {'symbol': symbol, 'indexName': indexName }
+        resp = requests.post(url, params=params, data=json.dumps(data), headers=headers)
+        jsonDict = json.loads(resp.text)
+        #return json.dumps(jsonDict)
+        return jsonify(jsonDict)
+    except Exception as e:
+        logging.exception("Exception in /pibChat")
+        return jsonify({"error": str(e)}), 500
+    
 @app.route("/getAllIndexSessions", methods=["POST"])
 def getAllIndexSessions():
     indexType=request.json["indexType"]
@@ -306,55 +405,7 @@ def getIndexSessionDetail():
     except Exception as e:
         logging.exception("Exception in /getIndexSessionDetail")
         return jsonify({"error": str(e)}), 500
-    
-@app.route("/summaryAndQa", methods=["POST"])
-def summaryAndQa():
-    indexType=request.json["indexType"]
-    indexNs=request.json["indexNs"]
-    embeddingModelType=request.json["embeddingModelType"]
-    requestType=request.json["requestType"]
-    chainType=request.json["chainType"]
-    postBody=request.json["postBody"]
-    
-    try:
-        headers = {'content-type': 'application/json'}
-        url = os.environ.get("SUMMARYQA_URL")
-
-        data = postBody
-        params = {'indexType': indexType, "indexNs": indexNs, 'embeddingModelType': embeddingModelType, "requestType": requestType,
-                  'chainType': chainType  }
-        resp = requests.post(url, params=params, data=json.dumps(data), headers=headers)
-        jsonDict = json.loads(resp.text)
-        #return json.dumps(jsonDict)
-        return jsonify(jsonDict)
-    except Exception as e:
-        logging.exception("Exception in /summaryAndQa")
-        return jsonify({"error": str(e)}), 500
-    
-@app.route("/chat3", methods=["POST"])
-def chat3():
-    indexType=request.json["indexType"]
-    indexNs=request.json["indexNs"]
-    question=request.json["question"]
-    postBody=request.json["postBody"]
- 
-    logging.info(f"indexType: {indexType}")
-    logging.info(f"indexNs: {indexNs}")
-    
-    try:
-        headers = {'content-type': 'application/json'}
-        url = os.environ.get("CHAT3_URL")
-
-        data = postBody
-        params = {'indexType': indexType, "indexNs": indexNs, "question": question }
-        resp = requests.post(url, params=params, data=json.dumps(data), headers=headers)
-        jsonDict = json.loads(resp.text)
-        #return json.dumps(jsonDict)
-        return jsonify(jsonDict)
-    except Exception as e:
-        logging.exception("Exception in /chat3")
-        return jsonify({"error": str(e)}), 500
-
+        
 @app.route("/sqlChat", methods=["POST"])
 def sqlChat():
     question=request.json["question"]
@@ -428,6 +479,7 @@ def processDoc():
     chunkSize=request.json["chunkSize"]
     chunkOverlap=request.json["chunkOverlap"]
     promptType=request.json["promptType"]
+    deploymentType=request.json["deploymentType"]
     postBody=request.json["postBody"]
    
     try:
@@ -438,7 +490,7 @@ def processDoc():
         params = {'indexType': indexType, "indexName": indexName, "multiple": multiple , "loadType": loadType,
                   "existingIndex": existingIndex, "existingIndexNs": existingIndexNs, "embeddingModelType": embeddingModelType,
                   "textSplitter": textSplitter, "chunkSize": chunkSize, "chunkOverlap": chunkOverlap,
-                  "promptType": promptType}
+                  "promptType": promptType, "deploymentType": deploymentType}
         resp = requests.post(url, params=params, data=json.dumps(data), headers=headers)
         jsonDict = json.loads(resp.text)
         #return json.dumps(jsonDict)
@@ -473,10 +525,9 @@ def runEvaluation():
     
 @app.route("/processSummary", methods=["POST"])
 def processSummary():
-    multiple=request.json["multiple"]
-    loadType=request.json["loadType"]
-    embeddingModelType=request.json["embeddingModelType"]
-    chainType=request.json["chainType"]
+    indexNs=request.json["indexNs"]
+    indexType=request.json["indexType"]
+    existingSummary=request.json["existingSummary"]
     postBody=request.json["postBody"]
    
     try:
@@ -484,7 +535,7 @@ def processSummary():
         url = os.environ.get("PROCESSSUMMARY_URL")
 
         data = postBody
-        params = { "multiple": multiple , "loadType": loadType, "embeddingModelType": embeddingModelType, "chainType": chainType}
+        params = { "indexNs": indexNs , "indexType": indexType, "existingSummary": existingSummary}
         resp = requests.post(url, params=params, data=json.dumps(data), headers=headers)
         jsonDict = json.loads(resp.text)
         return jsonify(jsonDict)
@@ -583,6 +634,11 @@ def refreshIndex():
                 except:
                     chunkOverlap = "0"
 
+                try:
+                    singleFile = bool(strtobool(str(blob.metadata["singleFile"])))
+                except:
+                    singleFile = False
+
                 blobJson.append({
                     "embedded": blob.metadata["embedded"],
                     "indexName": blob.metadata["indexName"],
@@ -593,7 +649,8 @@ def refreshIndex():
                     "indexType":blob.metadata["indexType"],
                     "promptType": promptType,
                     "chunkSize": chunkSize,
-                    "chunkOverlap": chunkOverlap
+                    "chunkOverlap": chunkOverlap,
+                    "singleFile": singleFile,
                 })
             except Exception as e:
                 pass
@@ -604,6 +661,35 @@ def refreshIndex():
         logging.exception("Exception in /refreshIndex")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/getProspectusList", methods=["GET"])
+def getProspectusList():
+   
+    try:
+        SearchService = os.environ.get("SEARCHSERVICE")
+        SearchKey = os.environ.get("SEARCHKEY")
+        searchClient = SearchClient(endpoint=f"https://{SearchService}.search.windows.net",
+        index_name="prospectussummary",
+        credential=AzureKeyCredential(SearchKey))
+        try:
+            r = searchClient.search(  
+                search_text="",
+                select=["fileName"],
+                include_total_count=True
+            )
+            documentList = []
+            for document in r:
+                try:
+                    documentList.append({'fileName': document['fileName']})
+                except Exception as e:
+                    pass
+            return jsonify({"values" : documentList})
+        except Exception as e:
+            logging.exception("Exception in /getProspectusList")
+            return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        logging.exception("Exception in /getProspectusList")
+        return jsonify({"error": str(e)}), 500
+    
 @app.route("/getDocumentList", methods=["GET"])
 def getDocumentList():
    

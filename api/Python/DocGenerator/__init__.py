@@ -39,6 +39,7 @@ import boto3
 #from sentence_transformers import SentenceTransformer
 from typing import List
 from Utilities.envVars import *
+from langchain.chat_models import AzureChatOpenAI, ChatOpenAI
 
 try:
     redisUrl = "redis://default:" + RedisPassword + "@" + RedisAddress + ":" + RedisPort
@@ -49,124 +50,79 @@ try:
     # chromaClient.heartbeat()
     # logging.info("Successfully connected to Chroma DB. Collections found: %s",chromaClient.list_collections())
 except:
-    logging.info("Chroma or Redis not configured")
+    logging.error("Chroma or Redis not configured.  Ignoring.")
     
 def GetAllFiles(filesToProcess):
     files = []
-    convertedFiles = {}
-    for file in filesToProcess:
-        files.append({
-            "filename" : file['path'],
-            "converted": False,
-            "embedded": False,
-            "converted_path": ""
-            })
-    logging.info(f"Found {len(files)} files in the container")
-    for file in files:
-        convertedFileName = f"converted/{file['filename']}.zip"
-        if convertedFileName in convertedFiles:
-            file['converted'] = True
-            file['converted_path'] = convertedFiles[convertedFileName]
-
-    logging.info(files)
-    return files
-    #return []
-
-def main(req: func.HttpRequest, context: func.Context) -> func.HttpResponse:
-    logging.info(f'{context.function_name} HTTP trigger function processed a request.')
-    if hasattr(context, 'retry_context'):
-        logging.info(f'Current retry count: {context.retry_context.retry_count}')
-
-        if context.retry_context.retry_count == context.retry_context.max_retry_count:
-            logging.info(
-                f"Max retries of {context.retry_context.max_retry_count} for "
-                f"function {context.function_name} has been reached")
-
+    logging.info("Getting all files")
     try:
-        indexType = req.params.get('indexType')
-        loadType = req.params.get('loadType')
-        multiple = req.params.get('multiple')
-        indexName = req.params.get('indexName')
-        existingIndex=req.params.get("existingIndex")
-        existingIndexNs=req.params.get("existingIndexNs")
-        embeddingModelType=req.params.get("embeddingModelType")
-        textSplitter=req.params.get("textSplitter")
-        chunkSize=req.params.get("chunkSize")
-        chunkOverlap=req.params.get("chunkOverlap")
-        promptType=req.params.get("promptType")
-        body = json.dumps(req.get_json())
-    except ValueError:
-        return func.HttpResponse(
-             "Invalid body",
-             status_code=400
-        )
+        convertedFiles = {}
+        for file in filesToProcess:
+            files.append({
+                "filename" : file['path'],
+                "converted": False,
+                "embedded": False,
+                "converted_path": ""
+                })
+        logging.info(f"Found {len(files)} files in the container")
+        for file in files:
+            convertedFileName = f"converted/{file['filename']}.zip"
+            if convertedFileName in convertedFiles:
+                file['converted'] = True
+                file['converted_path'] = convertedFiles[convertedFileName]
 
-    if body:
-        try:
-            if len(PineconeKey) > 10 and len(PineconeEnv) > 10:
-                pinecone.init(
-                    api_key=PineconeKey,  # find at app.pinecone.io
-                    environment=PineconeEnv  # next to api key in console
-                )
-        except:
-            logging.info("Pinecone already initialized")
+        logging.info(files)
+    except Exception as e:
+        logging.error("Error in GetAllFiles: %s", e)
+    return files
 
-        logging.info("Embedding Model Type: %s", embeddingModelType)
-        result = ComposeResponse(indexType, loadType, multiple, indexName, existingIndex, existingIndexNs, 
-                                 embeddingModelType, textSplitter, chunkSize, chunkOverlap, promptType, body)
-        return func.HttpResponse(result, mimetype="application/json")
-    else:
-        return func.HttpResponse(
-             "Invalid body",
-             status_code=400
-        )
-
-def ComposeResponse(indexType, loadType,  multiple, indexName, existingIndex, existingIndexNs, embeddingModelType, 
-                    textSplitter, chunkSize, chunkOverlap, promptType, jsonData):
-    values = json.loads(jsonData)['values']
-
-    logging.info("Calling Compose Response")
-    # Prepare the Output before the loop
-    results = {}
-    results["values"] = []
-
-    for value in values:
-        outputRecord = TransformValue(indexType, loadType,  multiple, indexName, existingIndex, existingIndexNs, 
-                                      embeddingModelType, textSplitter, chunkSize, chunkOverlap, promptType, value)
-        if outputRecord != None:
-            results["values"].append(outputRecord)
-    return json.dumps(results, ensure_ascii=False)
-
-def summarizeGenerateQa(docs, embeddingModelType):
-
-    if embeddingModelType == "azureopenai":
+def summarizeGenerateQa(docs, embeddingModelType, deploymentType):
+    logging.info("Summarization started")
+    if (embeddingModelType == 'azureopenai'):
         openai.api_type = "azure"
         openai.api_key = OpenAiKey
         openai.api_version = OpenAiVersion
         openai.api_base = f"https://{OpenAiService}.openai.azure.com"
-        llm = AzureOpenAI(deployment_name=OpenAiDavinci,
-                temperature=os.environ['Temperature'] or 0.3,
-                openai_api_key=OpenAiKey,
-                max_tokens=512,
-                batch_size=10)
+
+        if deploymentType == 'gpt35':
+            llm = AzureChatOpenAI(
+                    openai_api_base=openai.api_base,
+                    openai_api_version=OpenAiVersion,
+                    deployment_name=OpenAiChat,
+                    temperature=0.3,
+                    openai_api_key=OpenAiKey,
+                    openai_api_type="azure",
+                    max_tokens=1000)
+        elif deploymentType == "gpt3516k":
+            llm = AzureChatOpenAI(
+                    openai_api_base=openai.api_base,
+                    openai_api_version=OpenAiVersion,
+                    deployment_name=OpenAiChat16k,
+                    temperature=0.3,
+                    openai_api_key=OpenAiKey,
+                    openai_api_type="azure",
+                    max_tokens=1000)
     elif embeddingModelType == "openai":
         openai.api_type = "open_ai"
         openai.api_base = "https://api.openai.com/v1"
         openai.api_version = '2020-11-07' 
         openai.api_key = OpenAiApiKey
-        llm = OpenAI(temperature=os.environ['Temperature'] or 0.3,
-                openai_api_key=OpenAiApiKey,
-                verbose=True,
-                max_tokens=512)
+        llm = ChatOpenAI(temperature=0.3,
+            openai_api_key=OpenAiApiKey,
+            model_name="gpt-3.5-turbo",
+            max_tokens=1000)
     elif embeddingModelType == "local":
         return "Local not supported", "Local not supported"
+    
+    logging.info("LLM Setup done")
+    logging.info("Document Summary started")
 
     try:
         summaryChain = load_summarize_chain(llm, chain_type="map_reduce")
-        summary = summaryChain.run(docs)
+        summary = summaryChain.run(docs[:5])
         logging.info("Document Summary completed")
     except Exception as e:
-        logging.info("Exception during summary" + str(e))
+        logging.error("Exception during summary" + str(e))
         summary = 'No summary generated'
         pass
 
@@ -176,6 +132,8 @@ def summarizeGenerateQa(docs, embeddingModelType):
             {summaries}
             =========
             """
+    
+    logging.info("Document QA started")
     try:
         qaPrompt = PromptTemplate(template=template, input_variables=["summaries"])
         qaChain = load_qa_with_sources_chain(llm, chain_type='stuff', prompt=qaPrompt)
@@ -183,90 +141,103 @@ def summarizeGenerateQa(docs, embeddingModelType):
         logging.info("Document QA completed")
         qa = answer['output_text'].replace('\nSample Questions: \n', '').replace('\nSample Questions:\n', '').replace('\n', '\\n')
     except Exception as e:
-        logging.info("Exception during QA" + str(e))
+        logging.error("Exception during QA" + str(e))
         qa = 'No Sample QA generated'
         pass
     #qa = qa.decode('utf8')
     return qa, summary
 
 def blobLoad(blobConnectionString, blobContainer, blobName):
-    readBytes  = getBlob(blobConnectionString, blobContainer, blobName)
-    downloadPath = os.path.join(tempfile.gettempdir(), blobName)
-    os.makedirs(os.path.dirname(tempfile.gettempdir()), exist_ok=True)
+    logging.info("Blob Load started")
     try:
-        with open(downloadPath, "wb") as file:
-            file.write(readBytes)
+        readBytes  = getBlob(blobConnectionString, blobContainer, blobName)
+        downloadPath = os.path.join(tempfile.gettempdir(), blobName)
+        os.makedirs(os.path.dirname(tempfile.gettempdir()), exist_ok=True)
+        try:
+            with open(downloadPath, "wb") as file:
+                file.write(readBytes)
+        except Exception as e:
+            logging.error(e)
+
+        logging.info("File created " + downloadPath)
+        if (blobName.endswith(".pdf")):
+            loader = PDFMinerLoader(downloadPath)
+        elif (blobName.endswith(".docx") or blobName.endswith(".doc")):
+            loader = UnstructuredWordDocumentLoader(downloadPath)
+
+        #loader = UnstructuredFileLoader(downloadPath)
+        rawDocs = loader.load()
+
+        fullPath = getFullPath(blobConnectionString, blobContainer, blobName)
+        for doc in rawDocs:
+            doc.metadata['source'] = fullPath
+        return rawDocs
     except Exception as e:
-        logging.error(e)
-
-    logging.info("File created " + downloadPath)
-    if (blobName.endswith(".pdf")):
-        loader = PDFMinerLoader(downloadPath)
-    elif (blobName.endswith(".docx") or blobName.endswith(".doc")):
-        loader = UnstructuredWordDocumentLoader(downloadPath)
-
-    #loader = UnstructuredFileLoader(downloadPath)
-    rawDocs = loader.load()
-
-    fullPath = getFullPath(blobConnectionString, blobContainer, blobName)
-    for doc in rawDocs:
-        doc.metadata['source'] = fullPath
-    return rawDocs
+        logging.error("Error in blobLoad: %s", e)
+        return None
 
 def s3Load(bucket, key, s3Client):
-    downloadPath = os.path.join(tempfile.gettempdir(), key)
-    os.makedirs(os.path.dirname(tempfile.gettempdir()), exist_ok=True)
-    s3Client.download_file(bucket, key, downloadPath)
-    logging.info("File created " + downloadPath)
-    loader = PDFMinerLoader(downloadPath)
-    rawDocs = loader.load()
-    return rawDocs, downloadPath
+    logging.info("Loading file from S3")
+    try:
+        downloadPath = os.path.join(tempfile.gettempdir(), key)
+        os.makedirs(os.path.dirname(tempfile.gettempdir()), exist_ok=True)
+        s3Client.download_file(bucket, key, downloadPath)
+        logging.info("File created " + downloadPath)
+        loader = PDFMinerLoader(downloadPath)
+        rawDocs = loader.load()
+        return rawDocs, downloadPath
+    except Exception as e:
+        logging.error("Error in s3Load: %s", e)
+        return None, None
 
 def storeIndex(indexType, docs, fileName, nameSpace, embeddingModelType):
-    if embeddingModelType == "azureopenai":
-        openai.api_type = "azure"
-        openai.api_key = OpenAiKey
-        openai.api_version = OpenAiVersion
-        openai.api_base = f"https://{OpenAiService}.openai.azure.com"
-        embeddings = OpenAIEmbeddings(deployment=OpenAiEmbedding,
-                chunk_size=1,
-                openai_api_key=OpenAiKey)
-    elif embeddingModelType == "openai":
-        #openai.debug = True
-        #openai.log = 'debug'
-        openai.api_type = "open_ai"
-        openai.api_base = "https://api.openai.com/v1"
-        openai.api_version = '2020-11-07' 
-        openai.api_key = OpenAiApiKey
-        embeddings = OpenAIEmbeddings(openai_api_key=OpenAiApiKey)
-    elif embeddingModelType == "local":
-        #embeddings = LocalHuggingFaceEmbeddings("all-mpnet-base-v2")
-        return
+    logging.info("Storing index")
+    try:
+        if embeddingModelType == "azureopenai":
+            openai.api_type = "azure"
+            openai.api_key = OpenAiKey
+            openai.api_version = OpenAiVersion
+            openai.api_base = f"https://{OpenAiService}.openai.azure.com"
+            embeddings = OpenAIEmbeddings(deployment=OpenAiEmbedding,
+                    chunk_size=1,
+                    openai_api_key=OpenAiKey)
+        elif embeddingModelType == "openai":
+            #openai.debug = True
+            #openai.log = 'debug'
+            openai.api_type = "open_ai"
+            openai.api_base = "https://api.openai.com/v1"
+            openai.api_version = '2020-11-07' 
+            openai.api_key = OpenAiApiKey
+            embeddings = OpenAIEmbeddings(openai_api_key=OpenAiApiKey)
+        elif embeddingModelType == "local":
+            #embeddings = LocalHuggingFaceEmbeddings("all-mpnet-base-v2")
+            return
 
-    logging.info("Store the index in " + indexType + " and name : " + nameSpace)
-    if indexType == 'pinecone':
-        Pinecone.from_documents(docs, embeddings, index_name=VsIndexName, namespace=nameSpace)
-    elif indexType == "redis":
-        Redis.from_documents(docs, embeddings, redis_url=redisUrl, index_name=nameSpace)
-    elif indexType == "cogsearch" or indexType == "cogsearchvs":
-        createSearchIndex(indexType, nameSpace)
-        indexSections(indexType, embeddingModelType, fileName, nameSpace, docs)
-    elif indexType == "chroma":
-        logging.info("Chroma Client: " + str(docs))
-        #Chroma.from_documents(docs, embeddings, collection_name=nameSpace, client=chromaClient, embedding_function=embeddings)
-    elif indexType == 'milvus':
-        milvus = Milvus(connection_args={"host": "127.0.0.1", "port": "19530"},
-                        collection_name=VsIndexName, text_field="text", embedding_function=embeddings)
-        Milvus.from_documents(docs,embeddings)
+        logging.info("Store the index in " + indexType + " and name : " + nameSpace)
+        if indexType == 'pinecone':
+            Pinecone.from_documents(docs, embeddings, index_name=VsIndexName, namespace=nameSpace)
+        elif indexType == "redis":
+            Redis.from_documents(docs, embeddings, redis_url=redisUrl, index_name=nameSpace)
+        elif indexType == "cogsearch" or indexType == "cogsearchvs":
+            createSearchIndex(indexType, nameSpace)
+            indexSections(indexType, embeddingModelType, fileName, nameSpace, docs)
+        elif indexType == "chroma":
+            logging.info("Chroma Client: " + str(docs))
+            #Chroma.from_documents(docs, embeddings, collection_name=nameSpace, client=chromaClient, embedding_function=embeddings)
+        elif indexType == 'milvus':
+            milvus = Milvus(connection_args={"host": "127.0.0.1", "port": "19530"},
+                            collection_name=VsIndexName, text_field="text", embedding_function=embeddings)
+            Milvus.from_documents(docs,embeddings)
+    except Exception as e:
+        logging.error("Exception during storeIndex" + str(e))
+        pass
 
 def Embed(indexType, loadType, multiple, indexName,  value,  blobConnectionString,
                                 blobContainer, blobPrefix, blobName, s3Bucket, s3Key, s3AccessKey,
                                 s3SecretKey, s3Prefix, existingIndex, existingIndexNs,
-                                embeddingModelType, textSplitterType, chunkSize, chunkOverlap, promptType):
+                                embeddingModelType, textSplitterType, chunkSize, chunkOverlap, promptType, deploymentType):
     logging.info("Embedding Data")
     try:
-        logging.info("Loading Embedding Model " + embeddingModelType)
-
         uResultNs = uuid.uuid4()
         
         if (existingIndex == "true"):
@@ -274,6 +245,11 @@ def Embed(indexType, loadType, multiple, indexName,  value,  blobConnectionStrin
         else:
             indexGuId = uResultNs.hex
         logging.info("Index will be created as " + indexGuId)
+
+        if multiple == "true":
+            singleFile = "false"
+        else:
+            singleFile = "true"
 
         if (loadType == "files"):
             try:
@@ -351,18 +327,20 @@ def Embed(indexType, loadType, multiple, indexName,  value,  blobConnectionStrin
                             logging.info(e)
                             upsertMetadata(OpenAiDocConnStr, OpenAiDocContainer, fileName, {'embedded': 'false', 'indexType': indexType,
                                                                                             "textSplitterType": textSplitterType, 
-                                    "chunkSize": chunkSize, "chunkOverlap": chunkOverlap, "promptType": promptType})
+                                    "chunkSize": chunkSize, "chunkOverlap": chunkOverlap, "promptType": promptType, "singleFile": singleFile})
                             errorMessage = str(e)
                             return errorMessage
                     if not(fileName.endswith('.csv')):
                         logging.info("Perform Summarization and QA")
-                        qa, summary = summarizeGenerateQa(docs, embeddingModelType)
+                        qa, summary = summarizeGenerateQa(docs, embeddingModelType, deploymentType)
                         logging.info("Upsert metadata")
                         metadata = {'embedded': 'true', 'namespace': indexGuId, 'indexType': indexType, 
                                     "indexName": indexName.replace("-", "_"),
                                     "textSplitterType": textSplitterType, 
                                     "chunkSize": chunkSize, "chunkOverlap": chunkOverlap,
-                                    "promptType": promptType}
+                                    "promptType": promptType,
+                                    "singleFile": singleFile}
+                        logging.info(str(metadata))
                         upsertMetadata(OpenAiDocConnStr, OpenAiDocContainer, fileName, metadata)
                         try:
                             metadata = {'summary': summary.replace("-", "_"), 'qa': qa.replace("-", "_")}
@@ -374,12 +352,17 @@ def Embed(indexType, loadType, multiple, indexName,  value,  blobConnectionStrin
                         metadata = {'embedded': 'true', 'namespace': indexGuId, 'indexType': "csv", "indexName": indexName.replace("-", "_"),
                                     'summary': 'No Summary', 'qa': 'No QA',
                                     "textSplitterType": textSplitterType, 
-                                    "chunkSize": chunkSize, "chunkOverlap": chunkOverlap, "promptType": promptType}
+                                    "chunkSize": chunkSize, "chunkOverlap": chunkOverlap, "promptType": promptType, "singleFile": singleFile}
                         upsertMetadata(OpenAiDocConnStr, OpenAiDocContainer, fileName, metadata)
                     logging.info("Sleeping")
                     time.sleep(5)
                 return "Success"
             except Exception as e:
+                logging.error("Error in processing file : " + str(e))
+                upsertMetadata(OpenAiDocConnStr, OpenAiDocContainer, indexName + ".txt", {'embedded': 'false', 'indexType': indexType,
+                                                                            "textSplitterType": textSplitterType, 
+                                                                            "chunkSize": chunkSize, "chunkOverlap": chunkOverlap,
+                                                                            "promptType": promptType, "singleFile": singleFile})
                 errorMessage = str(e)
                 return errorMessage
         elif (loadType == "webpages"):
@@ -411,21 +394,21 @@ def Embed(indexType, loadType, multiple, indexName,  value,  blobConnectionStrin
                     allDocs = allDocs + docs
                     storeIndex(indexType, docs, indexName + ".txt", indexGuId, embeddingModelType)
                 logging.info("Perform Summarization and QA")
-                qa, summary = summarizeGenerateQa(allDocs, embeddingModelType)
+                qa, summary = summarizeGenerateQa(allDocs, embeddingModelType, deploymentType)
                 logging.info("Upsert metadata")
                 upsertMetadata(OpenAiDocConnStr, OpenAiDocContainer, indexName + ".txt", {'embedded': 'true', 'namespace': indexGuId, 
                                                                                           'indexType': indexType, "indexName": indexName,
                                                                                           "textSplitterType": textSplitterType, 
                                                                                           "chunkSize": chunkSize, "chunkOverlap": chunkOverlap,
-                                                                                          "promptType": promptType})
+                                                                                          "promptType": promptType, "singleFile": singleFile})
                 upsertMetadata(OpenAiDocConnStr, OpenAiDocContainer, indexName + ".txt", {'summary': summary, 'qa': qa})
                 return "Success"
             except Exception as e:
-                logging.info(e)
+                logging.error("Error in processing Webpages : " + str(e))
                 upsertMetadata(OpenAiDocConnStr, OpenAiDocContainer, indexName + ".txt", {'embedded': 'false', 'indexType': indexType,
                                                                                           "textSplitterType": textSplitterType, 
                                                                                           "chunkSize": chunkSize, "chunkOverlap": chunkOverlap,
-                                                                                          "promptType": promptType})
+                                                                                          "promptType": promptType, "singleFile": singleFile})
                 errorMessage = str(e)
                 return errorMessage
         elif (loadType == "adlscontainer"):
@@ -464,16 +447,17 @@ def Embed(indexType, loadType, multiple, indexName,  value,  blobConnectionStrin
                     storeIndex(indexType, docs,  blob.name, indexGuId, embeddingModelType)
 
                     logging.info("Perform Summarization and QA")
-                    qa, summary = summarizeGenerateQa(docs, embeddingModelType)
+                    qa, summary = summarizeGenerateQa(docs, embeddingModelType, deploymentType)
                     logging.info("Upsert metadata")
                     upsertMetadata(OpenAiDocConnStr, OpenAiDocContainer, blob.name, {'embedded': 'true', 'namespace': indexGuId, 'indexType': indexType, 
                                                                                      "indexName": indexName,
                                                                                      "textSplitterType": textSplitterType, 
                                                                                      "chunkSize": chunkSize, "chunkOverlap": chunkOverlap,
-                                                                                     "promptType": promptType})
+                                                                                     "promptType": promptType, "singleFile": singleFile})
                     upsertMetadata(OpenAiDocConnStr, OpenAiDocContainer, blob.name, {'summary': summary, 'qa': qa})
                 return "Success"
             except Exception as e:
+                logging.error("Error in processing ADLS Container : "  + str(e))
                 #upsertMetadata(OpenAiDocConnStr, OpenAiDocContainer, indexName + ".txt", {'embedded': 'false', 'indexType': indexType})
                 errorMessage = str(e)
                 return errorMessage
@@ -503,17 +487,17 @@ def Embed(indexType, loadType, multiple, indexName,  value,  blobConnectionStrin
                     docs = analyze_layout(readBytes, fullPath, FormRecognizerEndPoint, FormRecognizerKey, chunkSize)
                 storeIndex(indexType, docs, blobName, indexGuId, embeddingModelType)
                 logging.info("Perform Summarization and QA")
-                qa, summary = summarizeGenerateQa(docs, embeddingModelType)
+                qa, summary = summarizeGenerateQa(docs, embeddingModelType, deploymentType)
                 logging.info("Upsert metadata")
                 upsertMetadata(OpenAiDocConnStr, OpenAiDocContainer, blobName, {'embedded': 'true', 'namespace': indexGuId, 
                                                                                 'indexType': indexType, "indexName": indexName,
                                                                                 "textSplitterType": textSplitterType, 
                                                                                 "chunkSize": chunkSize, "chunkOverlap": chunkOverlap,
-                                                                                "promptType": promptType})
+                                                                                "promptType": promptType, "singleFile": singleFile})
                 upsertMetadata(OpenAiDocConnStr, OpenAiDocContainer, blobName, {'summary': summary, 'qa': qa})
                 return "Success"
             except Exception as e:
-                logging.info(e)
+                logging.error("Error in processing ADLS File : "  + str(e))
                 #upsertMetadata(OpenAiDocConnStr, OpenAiDocContainer, indexName + ".txt", {'embedded': 'false', 'indexType': indexType})
                 errorMessage = str(e)
                 return errorMessage
@@ -555,17 +539,17 @@ def Embed(indexType, loadType, multiple, indexName,  value,  blobConnectionStrin
                         docs = frDocs
                     storeIndex(indexType, docs, blob.key, indexGuId, embeddingModelType)
                     logging.info("Perform Summarization and QA")
-                    qa, summary = summarizeGenerateQa(docs, embeddingModelType)
+                    qa, summary = summarizeGenerateQa(docs, embeddingModelType, deploymentType)
                     logging.info("Upsert metadata")
                     upsertMetadata(OpenAiDocConnStr, OpenAiDocContainer, blob.key, {'embedded': 'true', 'namespace': indexGuId, 
                                                                                     'indexType': indexType, "indexName": indexName,
                                                                                     "textSplitterType": textSplitterType, 
                                                                                     "chunkSize": chunkSize, "chunkOverlap": chunkOverlap,
-                                                                                    "promptType": promptType})
+                                                                                    "promptType": promptType, "singleFile": singleFile})
                     upsertMetadata(OpenAiDocConnStr, OpenAiDocContainer, blob.key, {'summary': summary, 'qa': qa})
                 return "Success"            
             except Exception as e:
-                logging.info(e)
+                logging.error("Error in processing S3 Container : "  + str(e))
                 #upsertMetadata(OpenAiDocConnStr, OpenAiDocContainer, indexName + ".txt", {'embedded': 'false', 'indexType': indexType})
                 errorMessage = str(e)
                 return errorMessage
@@ -598,31 +582,31 @@ def Embed(indexType, loadType, multiple, indexName,  value,  blobConnectionStrin
                     docs = analyze_layout(readBytes, fullPath, FormRecognizerEndPoint, FormRecognizerKey, chunkSize)
                 storeIndex(indexType, docs, blobName, indexGuId, embeddingModelType)
                 logging.info("Perform Summarization and QA")
-                qa, summary = summarizeGenerateQa(docs, embeddingModelType)
+                qa, summary = summarizeGenerateQa(docs, embeddingModelType, deploymentType)
                 logging.info("Upsert metadata")
                 upsertMetadata(OpenAiDocConnStr, OpenAiDocContainer, indexName + ".txt", {'embedded': 'true', 'namespace': indexGuId, 
                                                                                           'indexType': indexType, "indexName": indexName,
                                                                                           "textSplitterType": textSplitterType, 
                                                                                           "chunkSize": chunkSize, "chunkOverlap": chunkOverlap,
-                                                                                          "promptType": promptType})
+                                                                                          "promptType": promptType, "singleFile": singleFile})
                 upsertMetadata(OpenAiDocConnStr, OpenAiDocContainer, indexName + ".txt", {'summary': summary, 'qa': qa})
                 return "Success"
             except Exception as e:
-                logging.info(e)
+                logging.error("Error in processing S3 File : "  + str(e))
                 upsertMetadata(OpenAiDocConnStr, OpenAiDocContainer, indexName + ".txt", {'embedded': 'false', 'indexType': indexType,
                                                                                           "textSplitterType": textSplitterType, 
                                                                                           "chunkSize": chunkSize, "chunkOverlap": chunkOverlap,
-                                                                                          "promptType": promptType})
+                                                                                          "promptType": promptType, "singleFile": singleFile})
                 errorMessage = str(e)
                 return errorMessage
     except Exception as e:
-        logging.error(e)
+        logging.error("General Exception : "  + str(e))
         errorMessage = str(e)
         return errorMessage
         #return func.HttpResponse("Error getting files",status_code=500)
 
 def TransformValue(indexType, loadType,  multiple, indexName, existingIndex, existingIndexNs, 
-                   embeddingModelType, textSplitter, chunkSize, chunkOverlap, promptType, record):
+                   embeddingModelType, textSplitter, chunkSize, chunkOverlap, promptType, deploymentType, record):
     logging.info("Calling Transform Value")
     try:
         recordId = record['recordId']
@@ -670,7 +654,7 @@ def TransformValue(indexType, loadType,  multiple, indexName, existingIndex, exi
         summaryResponse = Embed(indexType, loadType,  multiple, indexName, value, blobConnectionString,
                                 blobContainer, blobPrefix, blobName, s3Bucket, s3Key, s3AccessKey,
                                 s3SecretKey, s3Prefix, existingIndex, existingIndexNs, embeddingModelType,
-                                textSplitter, chunkSize, chunkOverlap, promptType)
+                                textSplitter, chunkSize, chunkOverlap, promptType, deploymentType)
         return ({
             "recordId": recordId,
             "data": {
@@ -684,3 +668,82 @@ def TransformValue(indexType, loadType,  multiple, indexName, existingIndex, exi
             "recordId": recordId,
             "errors": [ { "message": "Could not complete operation for record." }   ]
             })
+
+def ComposeResponse(indexType, loadType,  multiple, indexName, existingIndex, existingIndexNs, embeddingModelType, 
+                    textSplitter, chunkSize, chunkOverlap, promptType, deploymentType, jsonData):
+    values = json.loads(jsonData)['values']
+
+    logging.info("Calling Compose Response")
+    # Prepare the Output before the loop
+    results = {}
+    results["values"] = []
+
+    for value in values:
+        outputRecord = TransformValue(indexType, loadType,  multiple, indexName, existingIndex, existingIndexNs, 
+                                      embeddingModelType, textSplitter, chunkSize, chunkOverlap, promptType, deploymentType, value)
+        if outputRecord != None:
+            results["values"].append(outputRecord)
+    return json.dumps(results, ensure_ascii=False)
+
+def main(req: func.HttpRequest, context: func.Context) -> func.HttpResponse:
+    logging.info(f'{context.function_name} HTTP trigger function processed a request.')
+    if hasattr(context, 'retry_context'):
+        logging.info(f'Current retry count: {context.retry_context.retry_count}')
+
+        if context.retry_context.retry_count == context.retry_context.max_retry_count:
+            logging.info(
+                f"Max retries of {context.retry_context.max_retry_count} for "
+                f"function {context.function_name} has been reached")
+
+    try:
+        indexType = req.params.get('indexType')
+        loadType = req.params.get('loadType')
+        multiple = req.params.get('multiple')
+        indexName = req.params.get('indexName')
+        existingIndex=req.params.get("existingIndex")
+        existingIndexNs=req.params.get("existingIndexNs")
+        embeddingModelType=req.params.get("embeddingModelType")
+        textSplitter=req.params.get("textSplitter")
+        chunkSize=req.params.get("chunkSize")
+        chunkOverlap=req.params.get("chunkOverlap")
+        promptType=req.params.get("promptType")
+        deploymentType=req.params.get("deploymentType")
+        body = json.dumps(req.get_json())
+
+        logging.info("Index Type: %s", indexType)
+        logging.info("Load Type: %s", loadType)
+        logging.info("Multiple: %s", multiple)
+        logging.info("Index Name: %s", indexName)
+        logging.info("Existing Index: %s", existingIndex)
+        logging.info("Existing Index Namespace: %s", existingIndexNs)
+        logging.info("Embedding Model Type: %s", embeddingModelType)
+        logging.info("Text Splitter: %s", textSplitter)
+        logging.info("Chunk Size: %s", chunkSize)
+        logging.info("Chunk Overlap: %s", chunkOverlap)
+        logging.info("Prompt Type: %s", promptType)
+        logging.info("Deployment Type: %s", deploymentType)
+
+    except ValueError:
+        return func.HttpResponse(
+             "Invalid body",
+             status_code=400
+        )
+
+    if body:
+        try:
+            if len(PineconeKey) > 10 and len(PineconeEnv) > 10:
+                pinecone.init(
+                    api_key=PineconeKey,  # find at app.pinecone.io
+                    environment=PineconeEnv  # next to api key in console
+                )
+        except:
+            logging.error("Pinecone already initialized or not configured.  Ignoring.")
+
+        result = ComposeResponse(indexType, loadType, multiple, indexName, existingIndex, existingIndexNs, 
+                                 embeddingModelType, textSplitter, chunkSize, chunkOverlap, promptType, deploymentType, body)
+        return func.HttpResponse(result, mimetype="application/json")
+    else:
+        return func.HttpResponse(
+             "Invalid body",
+             status_code=400
+        )

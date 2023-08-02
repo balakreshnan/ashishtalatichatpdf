@@ -680,7 +680,7 @@ def incomeStatement(
     else:
         return __return_json_v3(path=path, query_vars=query_vars)
 
-def balanceSheet(
+def balanceSheetStatement(
     apikey: str,
     symbol: str,
     period: str = "annual",
@@ -710,7 +710,7 @@ def balanceSheet(
     else:
         return __return_json_v3(path=path, query_vars=query_vars)
 
-def cashFlow(
+def cashFlowStatement(
     apikey: str,
     symbol: str,
     period: str = "annual",
@@ -1310,6 +1310,20 @@ def upgradeDowngrades(
     :return: A list of lists.
     """
     path = f"upgrades-downgrades-consensus"
+    query_vars = {"apikey": apikey, "symbol": symbol}
+    return __return_json_v4(path=path, query_vars=query_vars)
+
+def socialSentiments(
+    apikey: str, symbol: str
+) -> typing.Optional[typing.List[typing.List]]:
+    """
+    Query FMP /upgrades-downgrades-consensus/ API.
+
+    :param apikey: Your API key.
+    :param symbol: Company ticker.
+    :return: A list of lists.
+    """
+    path = f"social-sentiment"
     query_vars = {"apikey": apikey, "symbol": symbol}
     return __return_json_v4(path=path, query_vars=query_vars)
 
