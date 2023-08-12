@@ -217,44 +217,48 @@ def getEarningCalls(totalYears, historicalYear, symbol, today):
         createEarningCallIndex(SearchService, SearchKey, earningIndexName)
         # Get the list of all earning calls available
         earningCallDates = earningCallsAvailableDates(apikey=FmpKey, symbol=symbol)
-        quarter = earningCallDates[0][0]
-        year = earningCallDates[0][1]
-        r = findEarningCalls(SearchService, SearchKey, earningIndexName, symbol, str(quarter), str(year), returnFields=['id', 'symbol', 
-                            'quarter', 'year', 'callDate', 'content'])
-        if r.get_count() == 0:
-            insertEarningCall = []
-            earningTranscript = earningCallTranscript(apikey=FmpKey, symbol=symbol, year=str(year), quarter=quarter)
-            for transcript in earningTranscript:
-                symbol = transcript['symbol']
-                quarter = transcript['quarter']
-                year = transcript['year']
-                callDate = transcript['date']
-                content = transcript['content']
-                id = f"{symbol}-{year}-{quarter}"
-                earningRecord = {
-                    "id": id,
-                    "symbol": symbol,
-                    "quarter": str(quarter),
-                    "year": str(year),
-                    "callDate": callDate,
-                    "content": content,
-                    #"inserteddate": datetime.now(central).strftime("%Y-%m-%d"),
-                }
-                earningsData.append(earningRecord)
-                insertEarningCall.append(earningRecord)
-                mergeDocs(SearchService, SearchKey, earningIndexName, insertEarningCall)
-        else:
-            logging.info(f"Found {r.get_count()} records for {symbol} for {quarter} {str(year)}")
-            for s in r:
-                record = {
-                        'id' : s['id'],
-                        'symbol': s['symbol'],
-                        'quarter': s['quarter'],
-                        'year': s['year'],
-                        'callDate': s['callDate'],
-                        'content': s['content']
+        if len(earningCallDates) > 0:
+            quarter = earningCallDates[0][0]
+            year = earningCallDates[0][1]
+            r = findEarningCalls(SearchService, SearchKey, earningIndexName, symbol, str(quarter), str(year), returnFields=['id', 'symbol', 
+                                'quarter', 'year', 'callDate', 'content'])
+            if r.get_count() == 0:
+                insertEarningCall = []
+                earningTranscript = earningCallTranscript(apikey=FmpKey, symbol=symbol, year=str(year), quarter=quarter)
+                for transcript in earningTranscript:
+                    symbol = transcript['symbol']
+                    quarter = transcript['quarter']
+                    year = transcript['year']
+                    callDate = transcript['date']
+                    content = transcript['content']
+                    id = f"{symbol}-{year}-{quarter}"
+                    earningRecord = {
+                        "id": id,
+                        "symbol": symbol,
+                        "quarter": str(quarter),
+                        "year": str(year),
+                        "callDate": callDate,
+                        "content": content,
+                        #"inserteddate": datetime.now(central).strftime("%Y-%m-%d"),
                     }
-                earningsData.append(record)
+                    earningsData.append(earningRecord)
+                    insertEarningCall.append(earningRecord)
+                    mergeDocs(SearchService, SearchKey, earningIndexName, insertEarningCall)
+            else:
+                logging.info(f"Found {r.get_count()} records for {symbol} for {quarter} {str(year)}")
+                for s in r:
+                    record = {
+                            'id' : s['id'],
+                            'symbol': s['symbol'],
+                            'quarter': s['quarter'],
+                            'year': s['year'],
+                            'callDate': s['callDate'],
+                            'content': s['content']
+                        }
+                    earningsData.append(record)
+        else:
+            logging.info(f"No earning calls found for {symbol}")
+            return earningsData
                 
         logging.info(f"Total records found for {symbol} : {len(earningsData)}")
 
@@ -294,7 +298,7 @@ def getPressReleases(today, symbol):
 # Helper function to find the answer to a question
 def findAnswer(chainType, topK, symbol, quarter, year, question, indexName, embeddingModelType, llm):
     # Since we already index our document, we can perform the search on the query to retrieve "TopK" documents
-    r = performEarningCallCogSearch(OpenAiService, OpenAiKey, OpenAiVersion, OpenAiApiKey, SearchService, SearchKey, embeddingModelType, 
+    r = performEarningCallCogSearch(OpenAiEndPoint, OpenAiKey, OpenAiVersion, OpenAiApiKey, SearchService, SearchKey, embeddingModelType, 
         OpenAiEmbedding, symbol, str(quarter), str(year), question, indexName, topK, returnFields=['id', 'symbol', 'quarter', 'year', 'callDate', 'content'])
 
     if r == None:
@@ -383,12 +387,13 @@ def processStep2(pibIndexName, cik, step, symbol, llm, today, embeddingModelType
             logging.info("Number of documents chunks generated from Call transcript : " + str(len(docs)))
         except Exception as e:
             logging.info("Error in splitting the earning call transcript : ", e)
+            return s2Data, content, latestCallDate
 
         # Store the last index of the earning call transcript in vector Index
         earningVectorIndexName = 'latestearningcalls'
         createEarningCallVectorIndex(SearchService, SearchKey, earningVectorIndexName)
         # Check if we already have the data store, if not then create it
-        indexEarningCallSections(OpenAiService, OpenAiKey, OpenAiVersion, OpenAiApiKey, SearchService, SearchKey,
+        indexEarningCallSections(OpenAiEndPoint, OpenAiKey, OpenAiVersion, OpenAiApiKey, SearchService, SearchKey,
                                 embeddingModelType, OpenAiEmbedding, earningVectorIndexName, docs,
                                 latestCallDate, latestEarningsData['symbol'], latestEarningsData['year'],
                                 latestEarningsData['quarter'])
@@ -916,7 +921,7 @@ def processStep4(symbol, cik, filingType, historicalYear, currentYear, embedding
                     logging.info("Number of documents chunks generated from Last SEC Filings : " + str(len(docs)))
 
                     # Store the last index of the earning call transcript in vector Index
-                    indexSecFilingsSections(OpenAiService, OpenAiKey, OpenAiVersion, OpenAiApiKey, SearchService, SearchKey,
+                    indexSecFilingsSections(OpenAiEndPoint, OpenAiKey, OpenAiVersion, OpenAiApiKey, SearchService, SearchKey,
                                         embeddingModelType, OpenAiEmbedding, secFilingsVectorIndexName, docs, cik,
                                         symbol, latestFilingDate, filingType)
         else:
@@ -1130,7 +1135,7 @@ def PibSteps(step, symbol, embeddingModelType, overrides):
             openai.api_type = "azure"
             openai.api_key = OpenAiKey
             openai.api_version = OpenAiVersion
-            openai.api_base = f"https://{OpenAiService}.openai.azure.com"
+            openai.api_base = f"{OpenAiEndPoint}"
 
             llm = AzureChatOpenAI(
                     openai_api_base=openai.api_base,
