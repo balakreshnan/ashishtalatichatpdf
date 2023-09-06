@@ -6,6 +6,9 @@ The repo provides a way to upload your own data so it's ready to try end to end.
 
 ## Updates
 
+* 9/3/2023 - Added [API](./api/PromptFlow/Chat/) for [Chat](./assets/ChatPf.png) using the Prompt Flow.  Allow end-user to select between Azure Functions as API (`ApiType` Configuration in Web App) or using Prompt Flow Managed endpoint.
+* 9/2/2023 - Added [API](./api/PromptFlow/QuestionAnswering/) for [Question Answering](./assets/QaPf.png) using the Prompt Flow.  Allow end-user to select between Azure Functions as API (`ApiType` Configuration in Web App) or using Prompt Flow Managed endpoint.
+* 8/31/2023 - Added example for [LLMOps](LLMOps.md) using [Prompt Flow](https://learn.microsoft.com/en-us/azure/machine-learning/prompt-flow/overview-what-is-prompt-flow?view=azureml-api-2).  The repo will be adding the flexibility to use the Prompt Flow Deployed Model as an alternative to current Azure Functions.
 * 8/20/2023 - Added support for the Markdown files (as zip file) and removed the chunk_size=1 from Azure OpenAiEmbedding
 * 8/11/2023 - Fixed the issue with Streaming Chat feature.
 * 8/10/2023 - **Breaking Changes** - Refactored all code to use `OpenAiEndPoint` configuration value instead of `OpenAiService`.  It is to support the best practices as they are outlined in [Enterprise Logging](https://github.com/Azure-Samples/openai-python-enterprise-logging) via Azure API Management. Your `OpenAiEndPoint` if using APIM will be API Gateway URL and the `OpenAiKey` will be the Product/Unlimited key.   If not using APIM, you don't need to change the key, but ensure `OpenAiEndPoint` is fully qualified URL of your AOAI deployment.  `OpenAiService` is no longer used.  Changes did impact the working on Chat on Stream feature, so it's disabled for now and will be enabled once tested and fixed.
