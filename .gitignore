@@ -6,6 +6,8 @@ X_Playground.ipynb
 medicalindex*
 medicalsummary*
 
+PitchBook*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -154,3 +156,25 @@ Workshop/promptflow/aoaicg.yml
 Workshop/promptflow/entaoai.yml
 Workshop/promptflow/llmops.yml
 api/PromptFlow/entaoai.yml
+Workshop/Data/CSV/Compliance Inbox.csv
+.gitignore
+api/PromptFlow/Autonomous/.promptflow/flow.detail.json
+api/PromptFlow/Autonomous/.promptflow/flow.layout.json
+api/PromptFlow/Autonomous/.promptflow/flow.output.json
+api/PromptFlow/Autonomous/.promptflow/flow.tools.json
+api/PromptFlow/Chat/.promptflow/flow.detail.json
+api/PromptFlow/Chat/.promptflow/flow.layout.json
+api/PromptFlow/Chat/.promptflow/flow.output.json
+api/PromptFlow/Chat/.promptflow/flow.tools.json
+api/PromptFlow/Evaluate/.promptflow/flow.detail.json
+api/PromptFlow/Evaluate/.promptflow/flow.layout.json
+api/PromptFlow/Evaluate/.promptflow/flow.metrics.json
+api/PromptFlow/Evaluate/.promptflow/flow.output.json
+api/PromptFlow/Evaluate/.promptflow/flow.tools.json
+api/PromptFlow/QuestionAnswering/.promptflow/flow.detail.json
+api/PromptFlow/QuestionAnswering/.promptflow/flow.layout.json
+api/PromptFlow/QuestionAnswering/.promptflow/flow.output.json
+api/PromptFlow/QuestionAnswering/.promptflow/flow.tools.json
+api/PromptFlow/SqlAsk/.promptflow/flow.detail.json
+api/PromptFlow/SqlAsk/.promptflow/flow.layout.json
+api/PromptFlow/SqlAsk/.promptflow/flow.tools.json

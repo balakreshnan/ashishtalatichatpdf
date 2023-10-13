@@ -18,7 +18,7 @@ from azure.search.documents.indexes.models import (
     SearchField,  
     SemanticSettings,  
     VectorSearch,  
-    VectorSearchAlgorithmConfiguration,  
+    HnswVectorSearchAlgorithmConfiguration,  
 )
 from azure.search.documents.models import Vector 
 from azure.search.documents.indexes import SearchIndexClient
@@ -95,14 +95,15 @@ def createSearchIndex(indexType, indexName):
                             SimpleField(name="metadata", type=SearchFieldDataType.String, searchable=True, retrievable=True),
                             SearchableField(name="content", type=SearchFieldDataType.String, retrievable=True),
                             # SearchField(name="contentVector", type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
-                            #             searchable=True, dimensions=1536, vector_search_configuration="vectorConfig"),
+                            #             searchable=True, vector_search_dimensions=1536, vector_search_configuration="vectorConfig"),
                             SimpleField(name="sourcefile", type="Edm.String", filterable=True, facetable=True),
                 ],
                 semantic_settings=SemanticSettings(
                     configurations=[SemanticConfiguration(
                         name='semanticConfig',
                         prioritized_fields=PrioritizedFields(
-                            title_field=None, prioritized_content_fields=[SemanticField(field_name='content')]))])
+                            title_field=SemanticField(field_name="content"), prioritized_content_fields=[SemanticField(field_name='content')]))],
+                        prioritized_keywords_fields=[SemanticField(field_name='sourcefile')])
                 )
         elif indexType == "cogsearch":
             index = SearchIndex(
@@ -145,14 +146,15 @@ def createSearchIndex(indexType, indexName):
                         SimpleField(name="metadata", type=SearchFieldDataType.String, searchable=True, retrievable=True),
                         SearchableField(name="content", type=SearchFieldDataType.String, retrievable=True),
                         # SearchField(name="contentVector", type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
-                        #             searchable=True, dimensions=1536, vector_search_configuration="vectorConfig"),
+                        #             searchable=True, vector_search_dimensions=1536, vector_search_configuration="vectorConfig"),
                         SimpleField(name="sourcefile", type="Edm.String", filterable=True, facetable=True),
             ],
             semantic_settings=SemanticSettings(
                 configurations=[SemanticConfiguration(
                     name='semanticConfig',
                     prioritized_fields=PrioritizedFields(
-                        title_field=None, prioritized_content_fields=[SemanticField(field_name='content')]))])
+                        title_field=SemanticField(field_name="content"), prioritized_content_fields=[SemanticField(field_name='content')]))],
+                        prioritized_keywords_fields=[SemanticField(field_name='sourcefile')])
             )
 
         try:

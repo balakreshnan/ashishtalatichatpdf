@@ -30,9 +30,9 @@ For this workshop following are some of the operations we will automate:
 - [Python 3.9 or later](https://www.python.org/downloads/) installed on your local machine.
 - [Install Prompt Flow Extension](https://marketplace.visualstudio.com/items?itemName=prompt-flow.prompt-flow)
 - Custom Environment.  Go to Azure ML Workspace -> Assets -> Environments -> Custom Environments -> Create.  Select the following configuration
-  - Name - entaoaienv
+  - Name - entaoai
   - Select environment source - Use existing docker image with optional conda file
-  - Container registry image path - docker pull akshata13/chatpdfenv:latest
+  - Container registry image path - docker pull akshata13/entaoai:latest
   - Click Next, Next on Tags and Click Create on Review screen
   - ![Custom Environment](./assets/custom-environment.png)
 - Create new Compute Instance (Azure ML Workspace -> Manage -> Compute -> Compute Instance -> Create).  Select the following configuration
@@ -46,7 +46,7 @@ For this workshop following are some of the operations we will automate:
   - Runtime name - entaoai
   - Select Azure ML compute instance -> entaoai
   - Custom Application -> New
-  - Environment -> use customized environment -> entaoaienv:1
+  - Environment -> use customized environment -> entaoai:1
   - Click Create
   - ![Custom Runtime](./assets/custom-environment.png)
 
@@ -125,10 +125,10 @@ Connection helps securely store and manage secret keys or other sensitive creden
 For the LLMOps examples all the artifacts are stored in [Prompt flow Folder](./Workshop/promptflow/).  [llmopsqa](./Workshop/promptflow/llmopsqa/) folder implements the Question Answering capability using the PromptFlow and RAG pattern.  Within the Prompt Flow folder [Environment](./Workshop/promptflow/environment/) is what defines the runtime environment for the Prompt Flow.  Details around creating custom runtime for Prompt flow is [Documented](https://learn.microsoft.com/en-us/azure/machine-learning/prompt-flow/how-to-customize-environment-runtime?view=azureml-api-2#customize-environment-with-docker-context-for-runtime).  All  YAML definition for [deployment](./Workshop/promptflow/deployment/) are available in the deployment folder.
 ![Prompt Flow](./assets/prompt-flow.png)
 
-As a part of the workflow, there are connections that are used, which you will need to create manually (until automated). Please go to workspace portal, click `Prompt flow` -> `Connections` -> `Create`, then follow the instruction to create your own connections called `llmops`. Learn more on [connections](https://learn.microsoft.com/en-us/azure/machine-learning/prompt-flow/concept-connections?view=azureml-api-2).  The example connections definition is available for [entaoai](./Workshop/promptflow/entaoai.example.yml) and [aoaicg](./Workshop/promptflow/aoaicg.example.yml) or alternatively you can use [Notebook](./Workshop/2B1_AskQuestionPromptFlow.ipynb) to create those connections using SDK or CLI.
+As a part of the workflow, there are connections that are used, which you will need to create manually (until automated). Please go to workspace portal, click `Prompt flow` -> `Connections` -> `Create`, then follow the instruction to create your own connections called `llmops`. Learn more on [connections](https://learn.microsoft.com/en-us/azure/machine-learning/prompt-flow/concept-connections?view=azureml-api-2).  The example connections definition is available for [llmops](./Workshop/promptflow/llmops.example.yml) and [aoaicg](./Workshop/promptflow/aoaicg.example.yml) or alternatively you can use [Notebook](./Workshop/2B1_AskQuestionPromptFlow.ipynb) to create those connections using SDK or CLI.
 ![Prompt Flow Connections](./assets/prompt-flow-connections.png)
 
-`aoai` connection
+`llmops` connection
 Go to Azure ML Workspace -> Prompt Flow -> Connections -> Create -> Azure OpenAI.  Select the following configuration.  **Note** Ensure the model deployment name matches to what you have deployed in Azure OpenAI.
 ![AOAI Custom Connections](./assets/custom-connection.png)
 

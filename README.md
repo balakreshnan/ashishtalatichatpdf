@@ -1,4 +1,4 @@
-# ChatGPT + Enterprise data with Azure OpenAI
+# Chat with your enterprise data using LLM
 
 This sample demonstrates a few approaches for creating ChatGPT-like experiences over your own data. It uses Azure OpenAI Service to access the ChatGPT model (gpt-35-turbo and gpt3), and vector store (Pinecone, Redis and others) or Azure cognitive search for data indexing and retrieval.
 
@@ -6,6 +6,18 @@ The repo provides a way to upload your own data so it's ready to try end to end.
 
 ## Updates
 
+* 10/12/2023 - Initial version of [Autonomous](./api/PromptFlow/Autonomous/) PromptFlow.  For now supporting the Pinecone indexes, but support for Cognitive Search and Redis will be updated soon.
+* 9/29/2023 - Added [Evaluate](./api/PromptFlow/Evaluate/) PromptFlow.  Prompt Flow once created in Azure ML, can be attached to your existing run to evaluate against the following evaluation process :
+  * Groundness - The Q&A Groundedness evaluation flow will evaluate the Q&A Retrieval Augmented Generation systems by leveraging the state-of-the-art Large Language Models (LLM) to measure the quality and safety of your responses. Utilizing GPT-3.5 as the Language Model to assist with measurements aims to achieve a high agreement with human evaluations compared to traditional mathematical measurements. gpt_groundedness (against context): Measures how grounded the model's predicted answers are against the context. Even if LLM’s responses are true, if not verifiable against context, then such responses are considered ungrounded.
+  * Ada Similarity - The Q&A ada_similarity evaluation flow will evaluate the Q&A Retrieval Augmented Generation systems by leveraging the state-of-the-art Large Language Models (LLM) to measure the quality and safety of your responses. Utilizing GPT-3.5 as the Language Model to assist with measurements aims to achieve a high agreement with human evaluations compared to traditional mathematical measurements. The Ada Similarity evaluation flow allows you to assess and evaluate your model with the LLM-assisted ada similarity metri ada_similarity: Measures the cosine similarity of ada embeddings of the model prediction and the ground truth. ada_similarity is a value in the range [0, 1].
+  * Coherence - The Q&A Coherence evaluation flow will evaluate the Q&A Retrieval Augmented Generation systems by leveraging the state-of-the-art Large Language Models (LLM) to measure the quality and safety of your responses. Utilizing GPT-3.5 as the Language Model to assist with measurements aims to achieve a high agreement with human evaluations compared to traditional mathematical measurements. The Coherence evaluation flow allows you to assess and evaluate your model with the LLM-assisted Coherence metric. gpt_coherence: Measures the quality of all sentences in a model's predicted answer and how they fit together naturally. Coherence is scored on a scale of 1 to 5, with 1 being the worst and 5 being the best.
+  * Similarity - The Q&A Similarity evaluation flow will evaluate the Q&A Retrieval Augmented Generation systems by leveraging the state-of-the-art Large Language Models (LLM) to measure the quality and safety of your responses. Utilizing GPT-3.5 as the Language Model to assist with measurements aims to achieve a high agreement with human evaluations compared to traditional mathematical measurements.  The Similarity evaluation flow allows you to assess and evaluate your model with the LLM-assisted Similarity metric. gpt_similarity: Measures similarity between user-provided ground truth answers and the model predicted answer. Similarity is scored on a scale of 1 to 5, with 1 being the worst and 5 being the best.
+  * F1 Score - The Q&A f1-score evaluation flow will evaluate the Q&A Retrieval Augmented Generation systems using f1-score based on the word counts in predicted answer and ground truth. The f1-score evaluation flow allows you to determine the f1-score metric using number of common tokens between the normalized version of the ground truth and the predicted answer. F1-score: Compute the f1-Score based on the tokens in the predicted answer and the ground truth. F1-score is a value in the range [0, 1].
+Groundedness metric is scored on a scale of 1 to 5, with 1 being the worst and 5 being the best.
+* 9/22/2023 - Added PromptFlow for [SqlAsk](./api/PromptFlow/SqlAsk/).  Ensure `PFSQLASK_URL` and `PFSQLASK_KEY` configuration values are added to deployed endpoint to enable the feature.  Also make sure `SynapseName`, `SynapsePool`, `SynapseUser` and `SynapsePassword` configuration values are added to `entaoai` PromptFlow connection.  Moved deleting the Session Capability for ChatGpt to Admin Page.
+* 9/20/2023 - Added configuration to allow end user to change the Search Type for Cognitive Search Vector Store index (Hybrid, Similarity/Vector and Hybrid Re-rank), based on the [Best Practices](https://techcommunity.microsoft.com/t5/azure-ai-services-blog/azure-cognitive-search-outperforming-vector-search-with-hybrid/ba-p/3929167) we shared.  QnA, Chat and Prompt Flow are modified.  QnA and Chat are implementing the customized Vector store implementation of Langchain and Prompt Flow using the helper functions.  Fixed the issue with QnA/Chat/PromptFlow not generating followup-questions.
+* 9/18/2023 - Refactored SQL NLP to not use Langchain Database Agent/Chain and instead use custom Prompts.
+* 9/15/2023 - Modified the azure search package to 11.4.0b9 and langchain to latest version.  Added capability to perform [evaluation](https://learn.microsoft.com/en-us/azure/machine-learning/prompt-flow/how-to-develop-an-evaluation-flow?view=azureml-api-2) on PromptFlow for both QnA and Chat.  [Bert PDF](./Workshop/Data/PDF/Bert.pdf) and [Evaluation Data](./api/PromptFlow/QuestionAnswering/bert.jsonl) can be used to perform Batch and Evaluation in Prompt Flow.  [Sample Notebook](./Workshop/12_PromptFlowQa.ipynb) showcasing the flow and E2E process is available.  [Bert Chat](./Workshop/promptflow/BertChat/) folder allows you to test E2E Prompt Flow, Batch Run and Evaluation in form of Notebook.
 * 9/3/2023 - Added [API](./api/PromptFlow/Chat/) for [Chat](./assets/ChatPf.png) using the Prompt Flow.  Allow end-user to select between Azure Functions as API (`ApiType` Configuration in Web App) or using Prompt Flow Managed endpoint.
 * 9/2/2023 - Added [API](./api/PromptFlow/QuestionAnswering/) for [Question Answering](./assets/QaPf.png) using the Prompt Flow.  Allow end-user to select between Azure Functions as API (`ApiType` Configuration in Web App) or using Prompt Flow Managed endpoint.
 * 8/31/2023 - Added example for [LLMOps](LLMOps.md) using [Prompt Flow](https://learn.microsoft.com/en-us/azure/machine-learning/prompt-flow/overview-what-is-prompt-flow?view=azureml-api-2).  The repo will be adding the flexibility to use the Prompt Flow Deployed Model as an alternative to current Azure Functions.
@@ -76,6 +88,10 @@ The repo provides a way to upload your own data so it's ready to try end to end.
 ## Azure Architecture
 
 ![Azure Services](/assets/AskChat.png)
+
+## PIB Architecture
+
+![PIB Architecture](/assets/PIB.png)
 
 ## QA over your data with Cache
 

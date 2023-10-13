@@ -7,7 +7,7 @@ import styles from "./SqlAgent.module.css";
 import { Pivot, PivotItem } from '@fluentui/react';
 import { SparkleFilled } from "@fluentui/react-icons";
 
-import { sqlChat, AskResponse, sqlChain, getSpeechApi, sqlVisual } from "../../api";
+import { sqlAsk, sqlChat, AskResponse, sqlChain, getSpeechApi, sqlVisual } from "../../api";
 import { Answer, AnswerError } from "../../components/Answer";
 import { QuestionInput } from "../../components/QuestionInput";
 import { AnalysisPanel, AnalysisPanelTabs } from "../../components/AnalysisPanel";
@@ -30,6 +30,7 @@ const SqlAgent = () => {
     const lastQuestionRef = useRef<string>("");
     const lastQuestionChainRef = useRef<string>("");
     const lastQuestionVisualRef = useRef<string>("");
+    const lastQuestionSqlAskRef = useRef<string>("");
     const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
 
     const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -39,6 +40,9 @@ const SqlAgent = () => {
     const [answerChain, setAnswerChain] = useState<[AskResponse, string | null]>();
     const [errorVisual, setErrorVisual] = useState<unknown>();
     const [answerVisual, setAnswerVisual] = useState<[AskResponse, string | null]>();
+    const [errorSqlChat, setErrorSqlChat] = useState<unknown>();
+    const [answerSqlAsk, setAnswerSqlAsk] = useState<[AskResponse, string | null]>();
+
     const [useAutoSpeakAnswers, setUseAutoSpeakAnswers] = useState<boolean>(false);
     const dropdownStyles: Partial<IDropdownStyles> = { dropdown: { width: 300 } };
 
@@ -49,6 +53,7 @@ const SqlAgent = () => {
     const [summary, setSummary] = useState<string>();
     const [sqlQuery, setSqlQuery] = useState<string>('');
     const [sqlData, setSqlData] = useState<Record<string, string | boolean | number>[]>([]);
+    const [sqlAskData, setSqlAskData] = useState('');
     const [exampleLoading, setExampleLoading] = useState(false)
 
     const [selectedEmbeddingItem, setSelectedEmbeddingItem] = useState<IDropdownOption>();
@@ -82,6 +87,8 @@ const SqlAgent = () => {
             let speechAnswer;
             if (answerType == "Agent")
                 speechAnswer = answer && answer[0].answer;
+            if (answerType == "SqlAsk")
+                speechAnswer = answerSqlAsk && answerSqlAsk[0].answer;
             else if (answerType == "Chain")
                 speechAnswer = answerChain && answerChain[0].answer;
             else if (answerType == "Visual")
@@ -174,6 +181,35 @@ const SqlAgent = () => {
                 const speechUrl = await getSpeechApi(result.answer);
                 setAnswer([result, speechUrl]);
                 startSynthesis("Agent", speechUrl);
+            }
+
+            if (result.error) {
+                setError(result.error);
+            }
+        } catch (e) {
+            setError(e);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const makeApiSqlAskRequest = async (question: string) => {
+        lastQuestionSqlAskRef.current = question;
+
+        error && setError(undefined);
+        setIsLoading(true);
+        setActiveCitation(undefined);
+        setActiveAnalysisPanelTab(undefined);
+
+        try {
+            const result = await sqlAsk(question, retrieveCount, String(selectedEmbeddingItem?.key));
+            setSqlQuery(result.toolInput? result.toolInput : '');
+            setSqlAskData(result.observation ? result.observation : '');
+            setAnswerSqlAsk([result, null]);
+            if(useAutoSpeakAnswers) {
+                const speechUrl = await getSpeechApi(result.answer);
+                setAnswerSqlAsk([result, speechUrl]);
+                startSynthesis("SqlAsk", speechUrl);
             }
 
             if (result.error) {
@@ -320,6 +356,10 @@ const SqlAgent = () => {
         makeApiRequest(example);
     };
 
+    const onExampleSqlAskClicked = (example: string) => {
+        makeApiSqlAskRequest(example);
+    };
+
     const onExampleChainClicked = (example: string) => {
         makeApiChainRequest(example);
     };
@@ -345,19 +385,18 @@ const SqlAgent = () => {
         questionList.push("What products are available")
         questionList.push("Which shippers can ship the orders?")
         questionList.push("How many shipment Speedy Express did?")
-        questionList.push("How many customers did placed an order")
-        questionList.push("For the year 1996 give me subtotals for each order")
-        questionList.push("Show me the Sales by Year")
-        questionList.push("Which employee did largest order")
-        questionList.push("get an alphabetical list of products.")
+        questionList.push("How many customers did placed an order?")
+        questionList.push("Show me the subtotals for each order for the year 1996")
+        questionList.push("Show me the total orders grouped by order year")
+        questionList.push("Which employee did largest order and how much was the amount")
+        questionList.push("Get an alphabetical list of products.")
         questionList.push("List the discontinued products")
-        questionList.push("calculates sales price for each order after discount is applied")
+        questionList.push("What is the total sales price for each order for the order year 1998")
         questionList.push("Show top 10 Products by Category")
         questionList.push("Display Products by Category")
-        questionList.push("Top 10 Customer and Suppliers by City")
-        questionList.push("List of the Products that are above average price")
+        questionList.push("Display Top 10 Customer and Suppliers grouped by City")
         questionList.push("List of the Products that are above average price, also show average price for each product")
-        questionList.push("Number of units in stock by category and supplier continent")
+        questionList.push("How many units are in stock, group by category and supplier continent")
 
         const shuffled = questionList.sort(() => 0.5 - Math.random());
         const selectedQuestion = shuffled.slice(0, 5);
@@ -392,6 +431,14 @@ const SqlAgent = () => {
         setAnswer(undefined);
     };
 
+    const clearSqlAskChat = () => {
+        lastQuestionSqlAskRef.current = "";
+        error && setError(undefined);
+        setActiveCitation(undefined);
+        setActiveAnalysisPanelTab(undefined);
+        setAnswerSqlAsk(undefined);
+    };
+
     const clearChainChat = () => {
         lastQuestionChainRef.current = "";
         errorChain && setErrorChain(undefined);
@@ -418,6 +465,125 @@ const SqlAgent = () => {
             <div className={styles.sqlAgentContainer}>
                 <Pivot aria-label="Chat">
                     <PivotItem
+                        headerText="Sql Ask"
+                        headerButtonProps={{
+                        'data-order': 1,
+                        }}
+                    >
+                    <div className={styles.sqlAgentTopSection}>
+                        <div className={styles.commandsContainer}>
+                            <ClearChatButton className={styles.settingsButton}  text="Clear chat" onClick={clearSqlAskChat} disabled={!lastQuestionSqlAskRef.current || isLoading} />
+                            <SettingsButton className={styles.settingsButton} onClick={() => setIsConfigPanelOpen(!isConfigPanelOpen)} />
+                        </div>
+                        <SparkleFilled fontSize={"30px"} primaryFill={"rgba(115, 118, 225, 1)"} aria-hidden="true" aria-label="Chat logo" />
+                        <h1 className={styles.sqlAgentTitle}>Ask your SQL</h1>
+                        <div className={styles.example}>
+                            <p className={styles.exampleText}><b>Scenario</b> : {summary}</p>
+                        </div>
+                        <h4 className={styles.chatEmptyStateSubtitle}>Ask anything or try from following example</h4>
+                        <div className={styles.sqlAgentQuestionInput}>
+                            <QuestionInput
+                                placeholder="Ask me anything"
+                                disabled={isLoading}
+                                updateQuestion={lastQuestionSqlAskRef.current}
+                                onSend={(question: string) => makeApiSqlAskRequest(question)}
+                            />
+                        </div>
+                        {exampleLoading ? <div><span>Please wait, Generating Sample Question</span><Spinner/></div> : null}
+                        <ExampleList onExampleClicked={onExampleSqlAskClicked}
+                            EXAMPLES={
+                                exampleList
+                        } />
+                    </div>
+                    <div className={styles.sqlAgentBottomSection}>
+                        {isLoading && <Spinner label="Generating answer" />}
+                        {!isLoading && answerSqlAsk && !error && (
+                            <div>
+                                <div className={styles.sqlAgentAnswerContainer}>
+                                    <Stack horizontal horizontalAlign="space-between">
+                                        <Pivot aria-label="Chat">
+                                            <PivotItem
+                                                headerText="Answer"
+                                                headerButtonProps={{
+                                                'data-order': 1,
+                                                }}
+                                            >
+                                                <Answer
+                                                    //answer={answer}
+                                                    answer={answerSqlAsk[0]}
+                                                    showFollowupQuestions={true}
+                                                    onFollowupQuestionClicked={question => makeApiSqlAskRequest(question)}
+                                                    isSpeaking = {isSpeaking}
+                                                    onCitationClicked={(x: string) => onShowCitation(x)}
+                                                    onThoughtProcessClicked={() => onToggleTab(AnalysisPanelTabs.ThoughtProcessTab)}
+                                                    onSupportingContentClicked={() => onToggleTab(AnalysisPanelTabs.SupportingContentTab)}
+                                                    onSpeechSynthesisClicked={() => isSpeaking? stopSynthesis(): startSynthesis("SqlChat", answerSqlAsk[1])}
+                                                />
+                                            </PivotItem>
+                                            <PivotItem
+                                                headerText="SQL Query"
+                                                headerButtonProps={{
+                                                'data-order': 2,
+                                                }}
+                                            >
+                                                <Stack className={`${styles.answerContainer}`} verticalAlign="space-between">
+                                                    <Stack.Item>
+                                                        <Stack horizontal horizontalAlign="space-between">
+                                                            <Sparkle28Filled primaryFill={"rgba(115, 118, 225, 1)"} aria-hidden="true" aria-label="Answer logo" />
+                                                        </Stack>
+                                                    </Stack.Item>
+                                                    <Stack.Item>
+                                                        <div className={styles.answerText}>
+                                                            <SqlViewer content={getSqlViewerContent(lastQuestionSqlAskRef.current)} />
+                                                        </div>
+                                                    </Stack.Item>
+                                                </Stack>
+                                            </PivotItem>
+                                            <PivotItem
+                                                headerText="SQL Data"
+                                                headerButtonProps={{
+                                                'data-order': 3,
+                                                }}
+                                            >
+                                                <Stack className={`${styles.answerContainer}`} verticalAlign="space-between">
+                                                    <Stack.Item>
+                                                        <Stack horizontal horizontalAlign="space-between">
+                                                            <Sparkle28Filled primaryFill={"rgba(115, 118, 225, 1)"} aria-hidden="true" aria-label="Answer logo" />
+                                                        </Stack>
+                                                    </Stack.Item>
+                                                    <Stack.Item>
+                                                        <div className={styles.answerText}>
+                                                            {sqlAskData}
+                                                            {/* <DataTable data={sqlData} /> */}
+                                                        </div>
+                                                    </Stack.Item>
+                                                </Stack>
+
+                                            </PivotItem>
+                                        </Pivot>
+                                    </Stack>                               
+                                </div>
+                            </div>
+                        )}
+                        {error ? (
+                            <div className={styles.sqlAgentAnswerContainer}>
+                                <AnswerError error={error.toString()} onRetry={() => makeApiSqlAskRequest(lastQuestionSqlAskRef.current)} />
+                            </div>
+                        ) : null}
+                        {activeAnalysisPanelTab && answerSqlAsk && (
+                            <AnalysisPanel
+                                className={styles.sqlAgentAnalysisPanel}
+                                activeCitation={activeCitation}
+                                onActiveTabChanged={x => onToggleTab(x)}
+                                citationHeight="600px"
+                                //answer={answer}
+                                answer={answerSqlAsk[0]}
+                                activeTab={activeAnalysisPanelTab}
+                            />
+                        )}
+                    </div>
+                    </PivotItem>
+                    {/* <PivotItem
                         headerText="Agent"
                         headerButtonProps={{
                         'data-order': 1,
@@ -532,8 +698,9 @@ const SqlAgent = () => {
                             />
                         )}
                     </div>
-                    </PivotItem>
-                    <PivotItem
+                    </PivotItem> */}
+                    
+                    {/* <PivotItem
                         headerText="Database Chain"
                         headerButtonProps={{
                         'data-order': 2,
@@ -559,13 +726,6 @@ const SqlAgent = () => {
                                 />
                             </div>
                             {exampleLoading ? <div><span>Please wait, Generating Sample Question</span><Spinner/></div> : null}
-                            {/* {!answerChain && (
-                                <ExampleList onExampleClicked={onExampleChainClicked}
-                                EXAMPLES={
-                                    exampleList
-                                } />
-                            )}
-                             */}
                             <ExampleList onExampleClicked={onExampleChainClicked}
                                 EXAMPLES={
                                     exampleList
@@ -655,7 +815,7 @@ const SqlAgent = () => {
                                 />
                             )}
                         </div>
-                    </PivotItem>
+                    </PivotItem> */}
                     {/* <PivotItem
                         headerText="SQL Visual"
                         headerButtonProps={{

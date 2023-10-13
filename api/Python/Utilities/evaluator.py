@@ -16,7 +16,7 @@ from azure.search.documents.indexes.models import (
     SearchField,  
     SemanticSettings,  
     VectorSearch,  
-    VectorSearchAlgorithmConfiguration,  
+    HnswVectorSearchAlgorithmConfiguration,  
 )
 from azure.search.documents.models import Vector  
 from tenacity import retry, wait_random_exponential, stop_after_attempt  
@@ -96,7 +96,8 @@ def createEvaluatorDocumentSearchIndex(SearchService, SearchKey, indexName):
                 configurations=[SemanticConfiguration(
                     name='semanticConfig',
                     prioritized_fields=PrioritizedFields(
-                        title_field=None, prioritized_content_fields=[SemanticField(field_name='documentName')]))])
+                       title_field=SemanticField(field_name="documentName"), prioritized_content_fields=[SemanticField(field_name='documentName')]))],
+                        prioritized_keywords_fields=[SemanticField(field_name='sourcefile')])
         )
 
         try:
@@ -124,7 +125,7 @@ def createEvaluatorQaSearchIndex(SearchService, SearchKey, indexName):
                 configurations=[SemanticConfiguration(
                     name='semanticConfig',
                     prioritized_fields=PrioritizedFields(
-                        title_field=None, prioritized_content_fields=[SemanticField(field_name='question')]))])
+                        title_field=SemanticField(field_name="question"), prioritized_content_fields=[SemanticField(field_name='question')]))])
         )
 
         try:
@@ -162,7 +163,7 @@ def createEvaluatorResultIndex(SearchService, SearchKey, indexName):
                 configurations=[SemanticConfiguration(
                     name='semanticConfig',
                     prioritized_fields=PrioritizedFields(
-                        title_field=None, prioritized_content_fields=[SemanticField(field_name='question')]))])
+                        title_field=SemanticField(field_name="question"), prioritized_content_fields=[SemanticField(field_name='question')]))])
         )
 
         try:
@@ -194,7 +195,7 @@ def createEvaluatorRunIndex(SearchService, SearchKey, indexName):
                 configurations=[SemanticConfiguration(
                     name='semanticConfig',
                     prioritized_fields=PrioritizedFields(
-                        title_field=None, prioritized_content_fields=[SemanticField(field_name='documentId')]))])
+                        title_field=SemanticField(field_name="documentId"), prioritized_content_fields=[SemanticField(field_name='documentId')]))])
         )
 
         try:
@@ -315,15 +316,15 @@ def createEvaluatorDataSearchIndex(SearchService, SearchKey, indexName):
                         SearchableField(name="content", type=SearchFieldDataType.String,
                                         searchable=True, retrievable=True, analyzer_name="en.microsoft"),
                         SearchField(name="contentVector", type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
-                                    searchable=True, dimensions=1536, vector_search_configuration="vectorConfig"),
+                                    searchable=True, vector_search_dimensions=1536, vector_search_configuration="vectorConfig"),
                         SimpleField(name="sourceFile", type=SearchFieldDataType.String, filterable=True, facetable=True),
             ],
             vector_search = VectorSearch(
                 algorithm_configurations=[
-                    VectorSearchAlgorithmConfiguration(
+                    HnswVectorSearchAlgorithmConfiguration(
                         name="vectorConfig",
                         kind="hnsw",
-                        hnsw_parameters={
+                        parameters={
                             "m": 4,
                             "efConstruction": 400,
                             "efSearch": 500,
@@ -336,7 +337,8 @@ def createEvaluatorDataSearchIndex(SearchService, SearchKey, indexName):
                 configurations=[SemanticConfiguration(
                     name='semanticConfig',
                     prioritized_fields=PrioritizedFields(
-                        title_field=None, prioritized_content_fields=[SemanticField(field_name='content')]))])
+                        title_field=SemanticField(field_name="content"), prioritized_content_fields=[SemanticField(field_name='content')]))],
+                        prioritized_keywords_fields=[SemanticField(field_name='sourcefile')])
         )
 
         try:
